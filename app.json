@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "Ambu-Life",
+    "slug": "ambu-life",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ambulife.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Ambu-Life necesită acces la locație pentru tracking-ul ambulanțelor.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Ambu-Life necesită acces la locație în fundal pentru tracking continuu.",
+        "NSCameraUsageDescription": "Ambu-Life necesită acces la cameră pentru a face poze la documente.",
+        "NSPhotoLibraryUsageDescription": "Ambu-Life necesită acces la galerie pentru a selecta imagini."
+      }
+    },
+    "android": {
+      "package": "com.ambulife.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#121212"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {},
+    "extra": {
+      "API_URL": "https://ambbackend.onrender.com/api",
+      "SOCKET_URL": "https://ambbackend.onrender.com",
+      "eas": {
+        "projectId": "1ec20d5b-f3bf-4099-bbe7-21c70aaa64e6"
+      }
+    },
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "redux-persist"
+        ],
+        "listUnknownPackages": false
+      }
+    }
+  }
+}
