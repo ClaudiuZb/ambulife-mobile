@@ -2,7 +2,7 @@
 import Constants from 'expo-constants';
 
 // IP-ul tău local
-const LOCAL_IP = '192.168.100.62';
+const LOCAL_IP = '192.168.0.152';
 
 // URL-ul Render pentru backend
 const RENDER_API_URL = 'https://ambbackend.onrender.com';

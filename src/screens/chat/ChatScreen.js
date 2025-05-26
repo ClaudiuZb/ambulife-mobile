@@ -29,6 +29,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import config from '../../utils/config';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -95,7 +96,7 @@ const ChatScreen = ({ navigation }) => {
 
          console.log('Initializing socket connection with token:', token.substring(0, 20) + '...');
          
-         const newSocket = io('http://192.168.0.62:5000', {
+         const newSocket = io(config.SOCKET_URL, {
            auth: {
              token: token
            },
@@ -132,7 +133,7 @@ const ChatScreen = ({ navigation }) => {
          newSocket.on('new_message', (newMessage) => {
            console.log('New message received:', newMessage);
            if (selectedChat && selectedChat._id === newMessage.chat) {
-             setMessages(prev => [...prev, newMessage]);
+             setMessages(prev => [newMessage, ...prev]); // Modificat pentru a adăuga la începutul array-ului
              markMessageAsRead(newMessage._id, newMessage.chat);
              updateChatLastMessage(newMessage);
            } else {
@@ -156,6 +157,15 @@ const ChatScreen = ({ navigation }) => {
                  read: [...(msg.read || []), { user: userId, readAt: new Date() }] 
                } : msg
              ));
+           }
+         });
+         
+         // Adăugăm listener pentru ștergerea grupului
+         newSocket.on('group_deleted', ({ chatId }) => {
+           setChats(prev => prev.filter(chat => chat._id !== chatId));
+           if (selectedChat && selectedChat._id === chatId) {
+             setSelectedChat(null);
+             Alert.alert('Notificare', 'Grupul a fost șters');
            }
          });
          
@@ -242,10 +252,6 @@ const ChatScreen = ({ navigation }) => {
        
        markChatAsRead(selectedChat._id);
        updateChatUnreadCount(selectedChat._id, 0);
-       
-       setTimeout(() => {
-         flatListRef.current?.scrollToEnd({ animated: false });
-       }, 100);
      } else {
        setError('Nu s-au putut obține mesajele');
      }
@@ -363,6 +369,27 @@ const ChatScreen = ({ navigation }) => {
    }
  };
 
+ // Adăugat funcția de ștergere grup
+ const deleteGroup = async (chatId) => {
+   try {
+     setLoading(true);
+     const res = await axios.delete(`/chat/group/${chatId}`);
+     
+     if (res.data.success) {
+       setChats(prev => prev.filter(chat => chat._id !== chatId));
+       setSelectedChat(null);
+       Alert.alert('Succes', 'Grupul a fost șters cu succes');
+     } else {
+       setError('Nu s-a putut șterge grupul');
+     }
+   } catch (err) {
+     console.error('Eroare la ștergerea grupului:', err);
+     setError(err.response?.data?.message || 'Eroare la ștergerea grupului');
+   } finally {
+     setLoading(false);
+   }
+ };
+
  const sendMessage = async () => {
    if (newMessage.trim() === '' && !replyTo) return;
    
@@ -386,12 +413,8 @@ const ChatScreen = ({ navigation }) => {
        replyTo: replyTo
      };
 
-     setMessages(prev => [...prev, optimisticMessage]);
+     setMessages(prev => [optimisticMessage, ...prev]); // Modificat pentru a adăuga la începutul array-ului
      
-     setTimeout(() => {
-       flatListRef.current?.scrollToEnd({ animated: true });
-     }, 100);
-
      stopTyping();
      setNewMessage('');
      setReplyTo(null);
@@ -408,7 +431,7 @@ const ChatScreen = ({ navigation }) => {
        setError('Nu s-a putut trimite mesajul');
      }
    } catch (error) {
-     setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
+     setMessages(prev => prev.filter(msg => msg._id !== Date.now().toString()));
      console.error('Eroare la trimiterea mesajului:', error);
      setError(error.response?.data?.message || 'Eroare la trimiterea mesajului');
    }
@@ -545,12 +568,8 @@ const ChatScreen = ({ navigation }) => {
      if (res.data.success) {
        setNewMessage('');
        setReplyTo(null);
-       setMessages(prev => [...prev, res.data.data]);
+       setMessages(prev => [res.data.data, ...prev]); // Modificat pentru a adăuga la începutul array-ului
        updateChatLastMessage(res.data.data);
-       
-       setTimeout(() => {
-         flatListRef.current?.scrollToEnd({ animated: true });
-       }, 100);
      } else {
        throw new Error('Eroare la încărcarea atașamentului');
      }
@@ -562,11 +581,20 @@ const ChatScreen = ({ navigation }) => {
 
  const handleDownloadAttachment = async (message) => {
    try {
+     setLoading(true); // Adaugă un indicator de încărcare
+     
      const token = await AsyncStorage.getItem('token');
-     const fileUri = FileSystem.documentDirectory + (message.attachmentName || `attachment_${message._id}`);
+     if (!token) {
+       throw new Error('Token lipsă');
+     }
+     
+     const fileName = message.attachmentName || `attachment_${message._id}`;
+     const fileUri = FileSystem.documentDirectory + fileName;
+     
+     console.log('Încercare descărcare fișier de la:', `${config.API_URL}/messages/attachment/${message._id}`);
      
      const downloadResult = await FileSystem.downloadAsync(
-       `http://192.168.0.62:5000/api/messages/attachment/${message._id}`,
+       `${config.API_URL}/messages/attachment/${message._id}`,
        fileUri,
        {
          headers: {
@@ -575,6 +603,8 @@ const ChatScreen = ({ navigation }) => {
        }
      );
      
+     console.log('Rezultat descărcare:', downloadResult);
+     
      if (downloadResult.status === 200) {
        if (await Sharing.isAvailableAsync()) {
          await Sharing.shareAsync(downloadResult.uri);
@@ -582,11 +612,25 @@ const ChatScreen = ({ navigation }) => {
          Alert.alert('Succes', 'Fișierul a fost descărcat');
        }
      } else {
-       throw new Error('Eroare la descărcarea fișierului');
+       throw new Error(`Eroare la descărcarea fișierului. Status: ${downloadResult.status}`);
      }
    } catch (error) {
      console.error('Eroare la descărcarea atașamentului:', error);
-     Alert.alert('Eroare', 'Nu s-a putut descărca fișierul');
+     Alert.alert(
+       'Eroare la descărcare', 
+       `Nu s-a putut descărca fișierul. Detalii: ${error.message}`,
+       [
+         { 
+           text: 'Încearcă din nou', 
+           onPress: () => handleDownloadAttachment(message) 
+         },
+         { 
+           text: 'Anulează' 
+         }
+       ]
+     );
+   } finally {
+     setLoading(false); // Ascunde indicatorul de încărcare
    }
  };
 
@@ -642,6 +686,12 @@ const ChatScreen = ({ navigation }) => {
      const otherUser = chat.users.find(u => u._id !== user._id);
      return otherUser ? otherUser.name.charAt(0).toUpperCase() : '?';
    }
+ };
+
+ // Funcție pentru a verifica dacă utilizatorul este admin (aplicație sau grup)
+ const isGroupAdmin = (chat) => {
+   if (!chat || !chat.isGroupChat) return false;
+   return (chat.groupAdmin && chat.groupAdmin._id === user._id) || user.role === 'admin';
  };
 
  const renderMessage = ({ item, index }) => {
@@ -710,18 +760,12 @@ const ChatScreen = ({ navigation }) => {
              {item.attachment && (
                <TouchableOpacity 
                  style={styles.attachmentContainer}
-                 onPress={() => {
-                   if (item.attachmentType === 'image') {
-                     handleDownloadAttachment(item);
-                   } else {
-                     handleDownloadAttachment(item);
-                   }
-                 }}
+                 onPress={() => handleDownloadAttachment(item)}
                >
                  {item.attachmentType === 'image' ? (
                    <Image 
                      source={{ 
-                       uri: `http://192.168.0.62:5000/api/messages/attachment/${item._id}`,
+                       uri: `${config.API_URL}/messages/attachment/${item._id}`,
                        headers: {
                          Authorization: `Bearer ${AsyncStorage.getItem('token')}`
                        }
@@ -835,6 +879,29 @@ const ChatScreen = ({ navigation }) => {
            >
              <Ionicons name="search" size={24} color={colors.primary} />
            </TouchableOpacity>
+           
+           {/* Adăugat buton de ștergere grup în header pentru admini */}
+           {selectedChat.isGroupChat && isGroupAdmin(selectedChat) && (
+             <TouchableOpacity
+               style={styles.headerAction}
+               onPress={() => {
+                 Alert.alert(
+                   'Confirmare',
+                   'Ești sigur că vrei să ștergi acest grup? Această acțiune nu poate fi anulată.',
+                   [
+                     { text: 'Anulare', style: 'cancel' },
+                     { 
+                       text: 'Șterge', 
+                       style: 'destructive', 
+                       onPress: () => deleteGroup(selectedChat._id) 
+                     }
+                   ]
+                 );
+               }}
+             >
+               <Ionicons name="trash" size={24} color={colors.error} />
+             </TouchableOpacity>
+           )}
          </View>
          
          {replyTo && (
@@ -853,7 +920,7 @@ const ChatScreen = ({ navigation }) => {
                    ) : (
                      `[${
                       replyTo.attachmentType === 'image' ? 'Imagine' :
-                       replyTo.attachmentType === 'audio' ? 'Audio' :
+                     replyTo.attachmentType === 'audio' ? 'Audio' :
                        replyTo.attachmentType === 'video' ? 'Video' : 'Document'
                      }]`
                    )}
@@ -874,7 +941,7 @@ const ChatScreen = ({ navigation }) => {
            style={[styles.messagesList, { backgroundColor: colors.chatBackground }]}
            contentContainerStyle={styles.messagesContent}
            showsVerticalScrollIndicator={false}
-           inverted={false}
+           inverted={true} // Setat la true pentru a inversa ordinea mesajelor
            keyboardShouldPersistTaps="handled"
            ListEmptyComponent={
              messagesLoading ? (
@@ -1017,6 +1084,31 @@ const ChatScreen = ({ navigation }) => {
              <TouchableOpacity
                style={[styles.chatItem, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
                onPress={() => setSelectedChat(item)}
+               onLongPress={() => {
+                 if (item.isGroupChat && isGroupAdmin(item)) {
+                   Alert.alert(
+                     'Opțiuni grup',
+                     'Ce dorești să faci cu acest grup?',
+                     [
+                       { text: 'Anulare', style: 'cancel' },
+                       { 
+                         text: 'Șterge grup', 
+                         style: 'destructive',
+                         onPress: () => {
+                           Alert.alert(
+                             'Confirmare',
+                             'Ești sigur că vrei să ștergi acest grup? Această acțiune nu poate fi anulată.',
+                             [
+                               { text: 'Anulare', style: 'cancel' },
+                               { text: 'Șterge', style: 'destructive', onPress: () => deleteGroup(item._id) }
+                             ]
+                           )
+                         }
+                       }
+                     ]
+                   );
+                 }
+               }}
              >
                <View style={[styles.avatar, { backgroundColor: item.isGroupChat ? colors.primary : colors.success }]}>
                  <Text style={styles.avatarText}>{getChatAvatar(item)}</Text>
@@ -1231,6 +1323,16 @@ const ChatScreen = ({ navigation }) => {
          </View>
        </View>
      </Modal>
+     
+     {/* Overlay de încărcare global */}
+     {loading && (
+       <View style={[styles.loadingOverlay, { backgroundColor: colors.modalBackground }]}>
+         <ActivityIndicator size="large" color={colors.primary} />
+         <Text style={[styles.loadingText, { color: '#fff', marginTop: 10 }]}>
+           Se procesează...
+         </Text>
+       </View>
+     )}
    </View>
  );
 };
@@ -1690,6 +1792,17 @@ const styles = StyleSheet.create({
  messageActionText: {
    fontSize: 16,
    marginLeft: 12,
+ },
+ // Adăugat stil pentru overlay-ul de încărcare
+ loadingOverlay: {
+   position: 'absolute',
+   top: 0,
+   left: 0,
+   right: 0,
+   bottom: 0,
+   justifyContent: 'center',
+   alignItems: 'center',
+   zIndex: 1000,
  },
 });
 

@@ -20,6 +20,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../utils/colors';
 import { Picker } from '@react-native-picker/picker';
 import { updateUser } from '../../redux/actions/authActions';
+import moment from 'moment';
+import 'moment/locale/ro';
+
+moment.locale('ro');
 
 // Componenta pentru asignarea vehiculului
 const AssignVehicle = () => {
@@ -402,7 +406,7 @@ const AssignVehicle = () => {
 };
 
 // Component pentru a afișa un serviciu
-const ServiceItem = ({ icon, title, info, cityName, date, amount, status, iconBgColor, onPress }) => (
+const ServiceItem = ({ icon, title, info, cityName, date, formattedDate, formattedTime, amount, status, iconBgColor, onPress }) => (
   <TouchableOpacity 
     style={styles.serviceItem}
     onPress={onPress}
@@ -451,14 +455,12 @@ const ServiceItem = ({ icon, title, info, cityName, date, amount, status, iconBg
       <View style={styles.serviceItemMeta}>
         <Ionicons name="location" size={12} color={colors.textSecondary} style={styles.metaIcon} />
         <Text style={styles.serviceItemMetaText}>{cityName}</Text>
-        {date && (
-          <>
-            <Ionicons name="calendar" size={12} color={colors.textSecondary} style={styles.metaIcon} />
-            <Text style={styles.serviceItemMetaText}>
-              {date.toLocaleDateString('ro-RO', {day: '2-digit', month: '2-digit', year: 'numeric'})}
-            </Text>
-          </>
-        )}
+        
+        <Ionicons name="calendar" size={12} color={colors.textSecondary} style={styles.metaIcon} />
+        <Text style={styles.serviceItemMetaText}>{formattedDate}</Text>
+        
+        <Ionicons name="time" size={12} color={colors.textSecondary} style={styles.metaIcon} />
+        <Text style={styles.serviceItemMetaText}>{formattedTime}</Text>
       </View>
     </View>
   </TouchableOpacity>
@@ -546,153 +548,173 @@ const AssistantDashboardScreen = () => {
 
   // Obținem cursele recente finalizate și programate
   const fetchRecentServices = async () => {
-    setLoading(true);
-    try {
-      console.log('Începem încărcarea datelor pentru user:', user?.name);
-      
-      // Obținem serviciile private
-      const privateServicesRes = await axios.get(`/private-services?limit=50`)
-        .catch(err => {
-          console.error('Eroare la obținerea serviciilor private:', err);
-          return { data: { success: true, data: [] } };
-        });
+  try {
+    console.log('Începem încărcarea datelor pentru user:', user?.name);
+    
+    // Obținem serviciile private
+    const privateServicesRes = await axios.get(`/private-services?limit=50`)
+      .catch(err => {
+        console.error('Eroare la obținerea serviciilor private:', err);
+        return { data: { success: true, data: [] } };
+      });
 
-      // Obținem serviciile CNAS
-      const cnasServicesRes = await axios.get(`/cnas-services?limit=50`)
-        .catch(err => {
-          console.error('Eroare la obținerea serviciilor CNAS:', err);
-          return { data: { success: true, data: [] } };
-        });
-        
-      // Obținem evenimentele
-      const eventsRes = await axios.get(`/event-services?limit=50`)
-        .catch(err => {
-          console.error('Eroare la obținerea evenimentelor:', err);
-          return { data: { success: true, data: [] } };
-        });
+    // Obținem serviciile CNAS
+    const cnasServicesRes = await axios.get(`/cnas-services?limit=50`)
+      .catch(err => {
+        console.error('Eroare la obținerea serviciilor CNAS:', err);
+        return { data: { success: true, data: [] } };
+      });
+      
+    // Obținem evenimentele
+    const eventsRes = await axios.get(`/event-services?limit=50`)
+      .catch(err => {
+        console.error('Eroare la obținerea evenimentelor:', err);
+        return { data: { success: true, data: [] } };
+      });
 
-      // Combinăm serviciile
-      let allServices = [];
-      
-      // Procesăm serviciile private
-      if (privateServicesRes?.data?.success && privateServicesRes?.data?.data && Array.isArray(privateServicesRes.data.data)) {
-        const privateServices = privateServicesRes.data.data
-          .map(service => {
-            // Extragem numele pacientului și telefonul din note
-            let patientName = 'Pacient necunoscut';
-            let patientPhone = '';
-            
-            if (service.notes && service.notes.includes('Pacient:')) {
-              const patientPart = service.notes.split('Pacient:')[1];
-              if (patientPart.includes(',')) {
-                patientName = patientPart.split(',')[0].trim();
-              }
+    // Combinăm serviciile
+    let allServices = [];
+    
+    // Procesăm serviciile private
+    if (privateServicesRes?.data?.success && privateServicesRes?.data?.data && Array.isArray(privateServicesRes.data.data)) {
+      const privateServices = privateServicesRes.data.data
+        .map(service => {
+          // Extragem numele pacientului și telefonul din note
+          let patientName = 'Pacient necunoscut';
+          let patientPhone = '';
+          
+          if (service.notes && service.notes.includes('Pacient:')) {
+            const patientPart = service.notes.split('Pacient:')[1];
+            if (patientPart.includes(',')) {
+              patientName = patientPart.split(',')[0].trim();
             }
-            
-            if (service.notes && service.notes.includes('Telefon:')) {
-              const phonePart = service.notes.split('Telefon:')[1];
-              if (phonePart.includes(',')) {
-                patientPhone = phonePart.split(',')[0].trim();
-              }
+          }
+          
+          if (service.notes && service.notes.includes('Telefon:')) {
+            const phonePart = service.notes.split('Telefon:')[1];
+            if (phonePart.includes(',')) {
+              patientPhone = phonePart.split(',')[0].trim();
             }
-            
-            // Verificăm dacă serviciul poate fi finalizat - acum orice cursa cu status pending poate fi finalizata
-            const canComplete = service.status === 'pending';
-            
-            return {
-              _id: service._id,
-              type: 'private',
-              icon: 'medical',
-              iconBgColor: colors.primary,
-              title: `Transport privat${service.status === 'completed' ? ' finalizat' : ''}`,
-              info: `${service.pickupPoint || service.pickupAddress || ''} → ${service.dropoffPoint || service.dropoffAddress || ''}`,
-              amount: service.amount ? `${service.amount} Lei` : '',
-              date: new Date(service.completedAt || service.date || new Date()),
-              cityName: (service.city && typeof service.city === 'object') ? 
-                service.city.name : 
-                (typeof service.city === 'string' ? service.city : 'Necunoscut'),
-              status: service.status === 'completed' ? 'Finalizat' : 
-                      service.status === 'cancelled' ? 'Anulat' : 'Urmează',
-              patientName,
-              patientPhone,
-              canComplete
-            };
-          });
-        
-        allServices = [...allServices, ...privateServices];
-      }
+          }
+          
+          // Formatăm data și ora
+          const serviceDate = new Date(service.date);
+          const formattedDate = moment(serviceDate).format('DD.MM.YYYY');
+          const formattedTime = moment(serviceDate).format('HH:mm');
+          
+          // Verificăm dacă serviciul poate fi finalizat - acum orice cursa cu status pending poate fi finalizata
+          const canComplete = service.status === 'pending';
+          
+          return {
+            _id: service._id,
+            type: 'private',
+            icon: 'medical',
+            iconBgColor: colors.primary,
+            title: `Transport privat${service.status === 'completed' ? ' finalizat' : ''}`,
+            info: `${service.pickupPoint || service.pickupAddress || ''} → ${service.dropoffPoint || service.dropoffAddress || ''}`,
+            amount: service.amount ? `${service.amount} Lei` : '',
+            date: serviceDate,
+            formattedDate: formattedDate,
+            formattedTime: formattedTime,
+            cityName: (service.city && typeof service.city === 'object') ? 
+              service.city.name : 
+              (typeof service.city === 'string' ? service.city : 'Necunoscut'),
+            status: service.status === 'completed' ? 'Finalizat' : 
+                    service.status === 'cancelled' ? 'Anulat' : 'Urmează',
+            patientName,
+            patientPhone,
+            canComplete
+          };
+        });
       
-      // Procesăm serviciile CNAS
-      if (cnasServicesRes?.data?.success && cnasServicesRes?.data?.data && Array.isArray(cnasServicesRes.data.data)) {
-        const cnasServices = cnasServicesRes.data.data
-          .map(service => {
-            // Verificăm dacă serviciul poate fi finalizat - acum orice cursa cu status pending poate fi finalizata
-            const canComplete = service.status === 'pending';
-                          
-            return {
-              _id: service._id,
-              type: 'cnas',
-              icon: 'medkit',
-              iconBgColor: colors.info,
-              title: `Serviciu CNAS${service.status === 'completed' ? ' finalizat' : ''}`,
-              info: `${service.pickupPoint || service.pickupAddress || ''} → ${service.dropoffPoint || service.dropoffAddress || ''}`,
-              amount: '',
-              date: new Date(service.completedAt || service.date || new Date()),
-              cityName: (service.city && typeof service.city === 'object') ? 
-                service.city.name : 
-                (typeof service.city === 'string' ? service.city : 'Necunoscut'),
-              status: service.status === 'completed' ? 'Finalizat' : 
-                      service.status === 'cancelled' ? 'Anulat' : 'Urmează',
-              patientName: service.patientName || 'Pacient necunoscut',
-              canComplete
-            };
-          });
-        
-        allServices = [...allServices, ...cnasServices];
-      }
-      
-      // Procesăm evenimentele
-      if (eventsRes?.data?.success && eventsRes?.data?.data && Array.isArray(eventsRes.data.data)) {
-        const events = eventsRes.data.data
-          .map(event => {
-            // Verificăm dacă evenimentul poate fi finalizat - acum orice cursa cu status pending poate fi finalizata
-            const canComplete = event.status === 'pending';
-                                
-            return {
-              _id: event._id,
-              type: 'event',
-              icon: 'calendar',
-              iconBgColor: colors.warning,
-              title: `Eveniment: ${event.eventName}`,
-              info: `Tip ambulanță: ${event.ambulanceType}`,
-              amount: '',
-              date: new Date(event.date),
-              cityName: (event.city && typeof event.city === 'object') ? 
-                event.city.name : 
-                (typeof event.city === 'string' ? event.city : 'Necunoscut'),
-              status: event.status === 'completed' ? 'Finalizat' : 
-                      event.status === 'cancelled' ? 'Anulat' : 'Urmează',
-              canComplete
-            };
-          });
-        
-        allServices = [...allServices, ...events];
-      }
-      
-      // Sortăm serviciile după dată (cele mai recente primele)
-      allServices.sort((a, b) => b.date - a.date);
-      
-      // Limităm la primele 10 servicii
-      setMyServices(allServices.slice(0, 10));
-    } catch (err) {
-      console.error('Eroare generală la obținerea serviciilor:', err);
-      
-      // Setăm valori implicite pentru a asigura că interfața nu se blochează
-      setMyServices([]);
-    } finally {
-      setLoading(false);
+      allServices = [...allServices, ...privateServices];
     }
-  };
+    
+    // Procesăm serviciile CNAS
+    if (cnasServicesRes?.data?.success && cnasServicesRes?.data?.data && Array.isArray(cnasServicesRes.data.data)) {
+      const cnasServices = cnasServicesRes.data.data
+        .map(service => {
+          // Formatăm data și ora
+          const serviceDate = new Date(service.date);
+          const formattedDate = moment(serviceDate).format('DD.MM.YYYY');
+          const formattedTime = moment(serviceDate).format('HH:mm');
+          
+          // Verificăm dacă serviciul poate fi finalizat - acum orice cursa cu status pending poate fi finalizata
+          const canComplete = service.status === 'pending';
+                        
+          return {
+            _id: service._id,
+            type: 'cnas',
+            icon: 'medkit',
+            iconBgColor: colors.info,
+            title: `Serviciu CNAS${service.status === 'completed' ? ' finalizat' : ''}`,
+            info: `${service.pickupPoint || service.pickupAddress || ''} → ${service.dropoffPoint || service.dropoffAddress || ''}`,
+            amount: '',
+            date: serviceDate,
+            formattedDate: formattedDate,
+            formattedTime: formattedTime,
+            cityName: (service.city && typeof service.city === 'object') ? 
+              service.city.name : 
+              (typeof service.city === 'string' ? service.city : 'Necunoscut'),
+            status: service.status === 'completed' ? 'Finalizat' : 
+                    service.status === 'cancelled' ? 'Anulat' : 'Urmează',
+            patientName: service.patientName || 'Pacient necunoscut',
+            canComplete
+          };
+        });
+      
+      allServices = [...allServices, ...cnasServices];
+    }
+    
+    // Procesăm evenimentele
+    if (eventsRes?.data?.success && eventsRes?.data?.data && Array.isArray(eventsRes.data.data)) {
+      const events = eventsRes.data.data
+        .map(event => {
+          // Formatăm data și ora
+          const eventDate = new Date(event.date);
+          const formattedDate = moment(eventDate).format('DD.MM.YYYY');
+          const formattedTime = moment(eventDate).format('HH:mm');
+          
+          // Verificăm dacă evenimentul poate fi finalizat - acum orice cursa cu status pending poate fi finalizata
+          const canComplete = event.status === 'pending';
+                                
+          return {
+            _id: event._id,
+            type: 'event',
+            icon: 'calendar',
+            iconBgColor: colors.warning,
+            title: `Eveniment: ${event.eventName}`,
+            info: `Tip ambulanță: ${event.ambulanceType}`,
+            amount: '',
+            date: eventDate,
+            formattedDate: formattedDate,
+            formattedTime: formattedTime,
+            cityName: (event.city && typeof event.city === 'object') ? 
+              event.city.name : 
+              (typeof event.city === 'string' ? event.city : 'Necunoscut'),
+            status: event.status === 'completed' ? 'Finalizat' : 
+                    event.status === 'cancelled' ? 'Anulat' : 'Urmează',
+            canComplete
+          };
+        });
+      
+      allServices = [...allServices, ...events];
+    }
+    
+    // Sortăm serviciile după dată (cele mai recente primele)
+    allServices.sort((a, b) => b.date - a.date);
+    
+    // Limităm la primele 10 servicii
+    setMyServices(allServices.slice(0, 10));
+  } catch (err) {
+    console.error('Eroare generală la obținerea serviciilor:', err);
+    
+    // Setăm valori implicite pentru a asigura că interfața nu se blochează
+    setMyServices([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Modal de confirmare pentru finalizarea serviciului
   const renderConfirmModal = () => {
@@ -751,586 +773,609 @@ const AssistantDashboardScreen = () => {
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Bună, {user?.name?.split(' ')[0] || 'Asistent'}!</Text>
-          <Text style={styles.headerSubtitle}>Bine ai venit în aplicația Ambu-Life</Text>
-        </View>
-
-        {/* Assign Vehicle component */}
-        <AssignVehicle />
-
-        {/* Acțiuni Rapide */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Acțiuni rapide</Text>
-          <View style={styles.quickActionsContainer}>
-            <TouchableOpacity 
-              style={styles.quickActionButton} 
-              onPress={() => navigateTo('PrivateBookings')}
-            >
-              <Ionicons name="medical" size={24} color={colors.primary} />
-              <Text style={styles.quickActionText}>Transport Privat</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.quickActionButton} 
-              onPress={() => navigateTo('CNASBookings')}
-            ><Ionicons name="document-text" size={24} color={colors.info} />
-             <Text style={styles.quickActionText}>Document CNAS</Text>
-           </TouchableOpacity>
-           <TouchableOpacity 
-             style={styles.quickActionButton} 
-             onPress={() => navigateTo('Events')}
-           >
-             <Ionicons name="calendar" size={24} color={colors.warning} />
-             <Text style={styles.quickActionText}>Evenimente</Text>
-           </TouchableOpacity>
-           <TouchableOpacity 
-             style={styles.quickActionButton} 
-             onPress={() => navigateTo('Fuel')}
-           >
-             <Ionicons name="car" size={24} color={colors.success} />
-             <Text style={styles.quickActionText}>Bon Carburant</Text>
-           </TouchableOpacity>
-         </View>
+       }
+     >
+       {/* Header */}
+       <View style={styles.header}>
+         <Text style={styles.headerTitle}>Bună, {user?.name?.split(' ')[0] || 'Asistent'}!</Text>
+         <Text style={styles.headerSubtitle}>Bine ai venit în aplicația Ambu-Life</Text>
        </View>
 
-       {/* Recent Services */}
+       {/* Assign Vehicle component */}
+       <AssignVehicle />
+
+       {/* Acțiuni Rapide */}
        <View style={styles.section}>
-         <Text style={styles.sectionTitle}>Curse recente</Text>
-         
-         {loading ? (
-           <View style={styles.loadingContainer}>
-             <ActivityIndicator size="small" color={colors.primary} />
-             <Text style={styles.loadingText}>Se încarcă cursele recente...</Text>
-           </View>
-         ) : myServices.length === 0 ? (
-           <View style={styles.emptyContainer}>
-             <Text style={styles.emptyText}>Nu există curse recente.</Text>
-           </View>
-         ) : (
-           <View style={styles.cardContainer}>
-             <FlatList
-               data={myServices}
-               keyExtractor={(item) => item._id}
-               renderItem={({ item }) => (
-                 <View style={styles.serviceItemContainer}>
-                   <ServiceItem 
-                     icon={item.icon}
-                     title={item.title}
-                     info={item.info}
-                     cityName={item.cityName}
-                     date={item.date}
-                     amount={item.amount}
-                     status={item.status}
-                     iconBgColor={item.iconBgColor}
-                     onPress={() => handleServicePress(item)}
-                   />
-                   {updatingService === item._id && (
-                     <View style={styles.updatingOverlay}>
-                       <ActivityIndicator size="small" color={colors.primary} />
-                     </View>
-                   )}
-                 </View>
-               )}
-               scrollEnabled={false}
-             />
-           </View>
-         )}
-       </View>
+         <Text style={styles.sectionTitle}>Acțiuni rapide</Text>
+         <View style={styles.quickActionsContainer}>
+           <TouchableOpacity 
+             style={styles.quickActionButton} 
+             onPress={() => navigateTo('PrivateBookings')}
+           >
+             <Ionicons name="medical" size={24} color={colors.primary} />
+             <Text style={styles.quickActionText}>Transport Privat</Text>
+           </TouchableOpacity>
+           <TouchableOpacity 
+             style={styles.quickActionButton} 
+             onPress={() => navigateTo('CNASBookings')}
+           ><Ionicons name="document-text" size={24} color={colors.info} />
+            <Text style={styles.quickActionText}>Document CNAS</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.quickActionButton} 
+            onPress={() => navigateTo('Events')}
+          >
+            <Ionicons name="calendar" size={24} color={colors.warning} />
+            <Text style={styles.quickActionText}>Evenimente</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.quickActionButton} 
+            onPress={() => navigateTo('Fuel')}
+          >
+            <Ionicons name="car" size={24} color={colors.success} />
+            <Text style={styles.quickActionText}>Bon Carburant</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-       {/* Modal de confirmare pentru finalizarea serviciului */}
-       {renderConfirmModal()}
-     </ScrollView>
-   </SafeAreaView>
- );
+      {/* Recent Services */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Curse recente</Text>
+        
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.loadingText}>Se încarcă cursele recente...</Text>
+          </View>
+        ) : myServices.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Nu există curse recente.</Text>
+          </View>
+        ) : (
+          <View style={styles.cardContainer}>
+            <FlatList
+              data={myServices}
+              keyExtractor={(item) => item._id}
+              renderItem={({ item }) => (
+                <View style={styles.serviceItemContainer}>
+                  <ServiceItem 
+                    icon={item.icon}
+                    title={item.title}
+                    info={item.info}
+                    cityName={item.cityName}
+                    date={item.date}
+                    formattedDate={item.formattedDate}
+                    formattedTime={item.formattedTime}
+                    amount={item.amount}
+                    status={item.status}
+                    iconBgColor={item.iconBgColor}
+                    onPress={() => handleServicePress(item)}
+                  />
+                  {updatingService === item._id && (
+                    <View style={styles.updatingOverlay}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  )}
+                </View>
+              )}
+              scrollEnabled={false}
+            />
+          </View>
+        )}
+      </View>
+
+      {/* Modal de confirmare pentru finalizarea serviciului */}
+      {renderConfirmModal()}
+    </ScrollView>
+  </SafeAreaView>
+);
 };
 
 const styles = StyleSheet.create({
- container: {
-   flex: 1,
-   backgroundColor: colors.background,
- },
- scrollView: {
-   flex: 1,
- },
- header: {
-   padding: 16,
-   paddingBottom: 0,
- },
- headerTitle: {
-   fontSize: 24,
-   fontWeight: 'bold',
-   color: colors.text,
- },
- headerSubtitle: {
-   fontSize: 14,
-   color: colors.textSecondary,
-   marginTop: 4,
- },
- 
- // Section
- section: {
-   padding: 16,
-   paddingTop: 8,
- },
- sectionTitle: {
-   fontSize: 18,
-   fontWeight: 'bold',
-   color: colors.text,
-   marginBottom: 12,
- },
- 
- // Quick Actions
- quickActionsContainer: {
-   flexDirection: 'row',
-   flexWrap: 'wrap',
-   justifyContent: 'space-between',
- },
- quickActionButton: {
-   width: '23%',
-   backgroundColor: colors.card,
-   borderRadius: 12,
-   padding: 16,
-   alignItems: 'center',
-   elevation: 2,
-   shadowColor: '#000',
-   shadowOffset: { width: 0, height: 1 },
-   shadowOpacity: 0.1,
-   shadowRadius: 1,
- },
- quickActionText: {
-   color: colors.text,
-   fontSize: 12,
-   marginTop: 8,
-   textAlign: 'center',
- },
- 
- // Card Container
- cardContainer: {
-   backgroundColor: colors.card,
-   borderRadius: 12,
-   padding: 12,
-   elevation: 2,
-   shadowColor: '#000',
-   shadowOffset: { width: 0, height: 1 },
-   shadowOpacity: 0.1,
-   shadowRadius: 1,
- },
- 
- // Service Item
- serviceItemContainer: {
-   marginBottom: 12,
-   borderBottomWidth: 1,
-   borderBottomColor: colors.divider,
-   paddingBottom: 12,
-   position: 'relative',
- },
- serviceItem: {
-   padding: 4,
- },
- serviceItemHeader: {
-   flexDirection: 'row',
-   justifyContent: 'space-between',
-   alignItems: 'flex-start',
-   marginBottom: 6,
- },
- serviceItemContent: {
-   flexDirection: 'row',
-   alignItems: 'center',
-   flex: 1,
- },
- serviceItemRight: {
-   alignItems: 'flex-end',
- },
- serviceItemIcon: {
-   width: 36,
-   height: 36,
-   borderRadius: 18,
-   justifyContent: 'center',
-   alignItems: 'center',
-   marginRight: 12,
- },
- serviceItemTextContainer: {
-   flex: 1,
- },
- serviceItemTitle: {
-   fontSize: 15,
-   fontWeight: 'bold',
-   color: colors.text,
- },
- serviceItemInfo: {
-   fontSize: 14,
-   color: colors.text,
-   marginBottom: 6,
-   paddingLeft: 48,
- },
- serviceItemFooter: {
-   flexDirection: 'row',
-   justifyContent: 'space-between',
-   alignItems: 'center',
-   paddingLeft: 48,
- },
- serviceItemMeta: {
-   flexDirection: 'row',
-   alignItems: 'center',
-   flexWrap: 'wrap',
-   flex: 1,
- },
- serviceItemMetaText: {
-   fontSize: 12,
-   color: colors.textSecondary,
-   marginRight: 8,
- },
- metaIcon: {
-   marginRight: 2,
- },
- serviceItemAmount: {
-   fontSize: 14,
-   fontWeight: 'bold',
-   color: colors.success,
-   marginBottom: 6,
- },
- statusBadge: {
-   flexDirection: 'row',
-   alignItems: 'center',
-   paddingHorizontal: 8,
-   paddingVertical: 3,
-   borderRadius: 12,
- },
- statusText: {
-   color: '#fff',
-   fontSize: 10,
-   fontWeight: 'bold',
-   marginLeft: 3,
- },
- updatingOverlay: {
-   position: 'absolute',
-   top: 0,
-   left: 0,
-   right: 0,
-   bottom: 0,
-   backgroundColor: 'rgba(255,255,255,0.7)',
-   justifyContent: 'center',
-   alignItems: 'center',
- },
- 
- // Loading
- loadingContainer: {
-   backgroundColor: colors.card,
-   padding: 20,
-   alignItems: 'center',
-   borderRadius: 12,
- },
- loadingText: {
-   marginTop: 8,
-   color: colors.textSecondary,
-   fontSize: 14,
- },
- 
- // Empty
- emptyContainer: {
-   backgroundColor: colors.card,
-   padding: 20,
-   alignItems: 'center',
-   borderRadius: 12,
- },
- emptyText: {
-   color: colors.textSecondary,
-   fontSize: 14,
- },
- 
- // Card
- card: {
-   backgroundColor: colors.card,
-   borderRadius: 12,
-   padding: 16,
-   marginHorizontal: 16,
-   marginVertical: 10,
-   shadowColor: '#000',
-   shadowOffset: { width: 0, height: 2 },
-   shadowOpacity: 0.1,
-   shadowRadius: 4,
-   elevation: 2,
- },
- cardTitle: {
-   fontSize: 18,
-   fontWeight: 'bold',
-   color: colors.text,
-   marginBottom: 16,
- },
- 
- // Form
- formRow: {
-   marginBottom: 16,
- },
- formColumn: {
-   flex: 1,
- },
- label: {
-   fontSize: 14,
-   color: colors.text,
-   marginBottom: 8,
-   fontWeight: '500',
- },
- // Container Picker pentru Android
- pickerContainer: {
-   backgroundColor: colors.inputBackground,
-   borderRadius: 8,
-   borderWidth: 1,
-   borderColor: colors.divider,
-   overflow: 'hidden',
-   marginBottom: 16,
- },
- picker: {
-   color: colors.text,
-   height: 50,
-   width: '100%',
- },
- 
- // Custom Picker Button pentru iOS
- pickerButton: {
-   flexDirection: 'row',
-   justifyContent: 'space-between',
-   alignItems: 'center',
-   backgroundColor: colors.inputBackground,
-   borderRadius: 8,
-   borderWidth: 1,
-   borderColor: colors.divider,
-   padding: 12,
-   marginBottom: 16,
- },
- pickerButtonText: {
-   fontSize: 16,
-   color: colors.text,
-   flex: 1,
- },
- pickerPlaceholder: {
-   color: colors.textSecondary,
- },
- 
- // Modal pentru picker pe iOS
- modalOverlay: {
-   flex: 1,
-   backgroundColor: 'rgba(0,0,0,0.5)',
-   justifyContent: 'center', // Modificat pentru a centra modalul
-   alignItems: 'center',     // Adăugat pentru a centra modalul
- },
- pickerModalContainer: {
-   backgroundColor: colors.card,
-   borderTopLeftRadius: 16,
-   borderTopRightRadius: 16,
-   paddingBottom: Platform.OS === 'ios' ? 30 : 16,
-   width: '100%',           // Pentru a ocupa întreaga lățime pentru acest modal specific
-   marginTop: 'auto',       // Pentru a poziționa la partea de jos
- },
- pickerModalHeader: {
-   flexDirection: 'row',
-   justifyContent: 'space-between',
-   alignItems: 'center',
-   padding: 16,
-   borderBottomWidth: 1,
-   borderBottomColor: colors.divider,
- },
- pickerModalTitle: {
-   fontSize: 18,
-   fontWeight: 'bold',
-   color: colors.text,
- },
- vehicleOption: {
-   flexDirection: 'row',
-   alignItems: 'center',
-   padding: 16,
-   borderBottomWidth: 1,
-   borderBottomColor: colors.divider,
- },
- selectedVehicleOption: {
-   backgroundColor: colors.primary + '10',
- },
- vehicleOptionText: {
-   fontSize: 16,
-   color: colors.text,
- },
- noVehiclesText: {
-   padding: 16,
-   textAlign: 'center',
-   color: colors.textSecondary,
-   fontStyle: 'italic',
- },
- pickerModalFooter: {
-   padding: 16,
-   borderTopWidth: 1,
-   borderTopColor: colors.divider,
-   alignItems: 'center',
- },
- pickerModalCancelButton: {
-   paddingVertical: 12,
-   paddingHorizontal: 24,
-   borderRadius: 8,
-   backgroundColor: colors.inputBackground,
- },
- pickerModalCancelText: {
-   color: colors.text,
-   fontWeight: 'bold',
-   fontSize: 16,
- },
- 
- // Buttons
- button: {
-   flexDirection: 'row',
-   alignItems: 'center',
-   justifyContent: 'center',
-   paddingVertical: 12,
-   paddingHorizontal: 16,
-   borderRadius: 8,
-   marginVertical: 8,
-   shadowColor: '#000',
-   shadowOffset: { width: 0, height: 1 },
-   shadowOpacity: 0.2,
-   shadowRadius: 1.5,
-   elevation: 2,
- },
- primaryButton: {
-   backgroundColor: colors.primary,
- },
- dangerButton: {
-   backgroundColor: colors.error,
- },
- disabledButton: {
-   opacity: 0.6,
- },
- buttonText: {
-   color: '#fff',
-   fontWeight: 'bold',
-   marginLeft: 8,
-   fontSize: 16,
- },
- 
- // Error and Warning
- errorContainer: {
-   backgroundColor: colors.error + '20',
-   padding: 12,
-   borderRadius: 8,
-   marginBottom: 16,
- },
- errorText: {
-   color: colors.error,
-   fontSize: 14,
- },
- warningContainer: {
-   backgroundColor: colors.warning + '20',
-   padding: 12,
-   borderRadius: 8,
-   marginTop: 16,
- },
- warningText: {
-   color: colors.warning,
-   fontSize: 14,
- },
- 
- // Vehicle Info
- vehicleInfoContainer: {
-   marginBottom: 8,
- },
- vehicleInfoRow: {
-   flexDirection: 'row',
-   justifyContent: 'space-between',
-   alignItems: 'center',
-   marginBottom: 16,
- },
- vehicleInfo: {
-   flexDirection: 'row',
-   alignItems: 'center',
- },
- vehicleIconContainer: {
-   width: 50,
-   height: 50,
-   borderRadius: 25,
-   backgroundColor: colors.primary + '20',
-   justifyContent: 'center',
-   alignItems: 'center',
-   marginRight: 12,
- },
- vehicleName: {
-   fontSize: 16,
-   fontWeight: 'bold',
-   color: colors.text,
- },
- vehiclePlate: {
-   fontSize: 14,
-   color: colors.textSecondary,
- },
- shiftDurationContainer: {
-   alignItems: 'center',
- },
- shiftDurationLabel: {
-   fontSize: 12,
-   color: colors.textSecondary,
-   marginBottom: 4,
- },
- shiftDuration: {
-   fontSize: 16,
-   fontWeight: 'bold',
-   color: colors.text,
- },
- 
- // Modal de confirmare
- confirmModalContainer: {
-   backgroundColor: colors.card,
-   borderRadius: 12,
-   width: '80%',
-   padding: 16,
-   shadowColor: '#000',
-   shadowOffset: { width: 0, height: 2 },
-   shadowOpacity: 0.25,
-   shadowRadius: 4,
-   elevation: 5,
- },
- confirmModalHeader: {
-   borderBottomWidth: 1,
-   borderBottomColor: colors.divider,
-   paddingBottom: 12,
-   marginBottom: 16,
- },
- confirmModalTitle: {
-   fontSize: 18,
-   fontWeight: 'bold',
-   color: colors.text,
-   textAlign: 'center',
- },
- confirmModalBody: {
-   marginBottom: 16,
- },
- confirmModalText: {
-   fontSize: 16,
-   color: colors.text,
-   textAlign: 'center',
- },
- confirmModalFooter: {
-   flexDirection: 'row',
-   justifyContent: 'space-between',
- },
- confirmButton: {
-   backgroundColor: colors.success,
-   flex: 1,
-   marginLeft: 8,
- },
- cancelButton: {
-   backgroundColor: colors.error,
-   flex: 1,
-   marginRight: 8,
- },
- confirmButtonText: {
-   color: '#fff',
-   fontWeight: 'bold',
-   textAlign: 'center',
- },
- cancelButtonText: {
-   color: '#fff',
-   fontWeight: 'bold',
-   textAlign: 'center',
- }
+container: {
+  flex: 1,
+  backgroundColor: colors.background,
+},
+scrollView: {
+  flex: 1,
+},
+header: {
+  padding: 16,
+  paddingBottom: 0,
+},
+headerTitle: {
+  fontSize: 24,
+  fontWeight: 'bold',
+  color: colors.text,
+},
+headerSubtitle: {
+  fontSize: 14,
+  color: colors.textSecondary,
+  marginTop: 4,
+},
+
+// Section
+section: {
+  padding: 16,
+  paddingTop: 8,
+},
+sectionTitle: {
+  fontSize: 18,
+  fontWeight: 'bold',
+  color: colors.text,
+  marginBottom: 12,
+},
+
+// Quick Actions
+quickActionsContainer: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  justifyContent: 'space-between',
+},
+quickActionButton: {
+  width: '23%',
+  backgroundColor: colors.card,
+  borderRadius: 12,
+  padding: 16,
+  alignItems: 'center',
+  elevation: 2,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.1,
+  shadowRadius: 1,
+},
+quickActionText: {
+  color: colors.text,
+  fontSize: 12,
+  marginTop: 8,
+  textAlign: 'center',
+},
+
+// Card Container
+cardContainer: {
+  backgroundColor: colors.card,
+  borderRadius: 12,
+  padding: 12,
+  elevation: 2,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.1,
+  shadowRadius: 1,
+},
+
+// Service Item
+serviceItemContainer: {
+  marginBottom: 12,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.divider,
+  paddingBottom: 12,
+  position: 'relative',
+},
+serviceItem: {
+  padding: 4,
+},
+serviceItemHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  marginBottom: 6,
+},
+serviceItemContent: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+},
+serviceItemRight: {
+  alignItems: 'flex-end',
+},
+serviceItemIcon: {
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 12,
+},
+serviceItemTextContainer: {
+  flex: 1,
+},
+serviceItemTitle: {
+  fontSize: 15,
+  fontWeight: 'bold',
+  color: colors.text,
+},
+serviceItemInfo: {
+  fontSize: 14,
+  color: colors.text,
+  marginBottom: 6,
+  paddingLeft: 48,
+},
+serviceItemFooter: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  paddingLeft: 48,
+},
+serviceItemMeta: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  flex: 1,
+},
+serviceItemMetaText: {
+  fontSize: 12,
+  color: colors.textSecondary,
+  marginRight: 8,
+},
+metaIcon: {
+  marginRight: 2,
+  marginLeft: 8,
+},
+serviceItemAmount: {
+  fontSize: 14,
+  fontWeight: 'bold',
+  color: colors.success,
+  marginBottom: 6,
+},
+statusBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 8,
+  paddingVertical: 3,
+  borderRadius: 12,
+},
+statusText: {
+  color: '#fff',
+  fontSize: 10,
+  fontWeight: 'bold',
+  marginLeft: 3,
+},
+updatingOverlay: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(255,255,255,0.7)',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+// Loading
+loadingContainer: {
+  backgroundColor: colors.card,
+  padding: 20,
+  alignItems: 'center',
+  borderRadius: 12,
+},
+loadingText: {
+  marginTop: 8,
+  color: colors.textSecondary,
+  fontSize: 14,
+},
+
+// Empty
+emptyContainer: {
+  backgroundColor: colors.card,
+  padding: 20,
+  alignItems: 'center',
+  borderRadius: 12,
+},
+emptyText: {
+  color: colors.textSecondary,
+  fontSize: 14,
+},
+
+// Card
+card: {
+  backgroundColor: colors.card,
+  borderRadius: 12,
+  padding: 16,
+  marginHorizontal: 16,
+  marginVertical: 10,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 4,
+  elevation: 2,
+},
+cardTitle: {
+  fontSize: 18,
+  fontWeight: 'bold',
+  color: colors.text,
+  marginBottom: 16,
+},
+
+// Form
+formRow: {
+  marginBottom: 16,
+},
+formColumn: {
+  flex: 1,
+},
+label: {
+  fontSize: 14,
+  color: colors.text,
+  marginBottom: 8,
+  fontWeight: '500',
+},
+// Container Picker pentru Android
+pickerContainer: {
+  backgroundColor: colors.inputBackground,
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: colors.divider,
+  overflow: 'hidden',
+  marginBottom: 16,
+},
+picker: {
+  color: colors.text,
+  height: 50,
+  width: '100%',
+},
+
+// Custom Picker Button pentru iOS
+pickerButton: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  backgroundColor: colors.inputBackground,
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: colors.divider,
+  padding: 12,
+  marginBottom: 16,
+},
+pickerButtonText: {
+  fontSize: 16,
+  color: colors.text,
+  flex: 1,
+},
+pickerPlaceholder: {
+  color: colors.textSecondary,
+},
+
+// Modal pentru picker pe iOS
+modalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0,0,0,0.5)',
+  justifyContent: 'center', // Modificat pentru a centra modalul
+  alignItems: 'center',     // Adăugat pentru a centra modalul
+},
+pickerModalContainer: {
+  backgroundColor: colors.card,
+  borderTopLeftRadius: 16,
+  borderTopRightRadius: 16,
+  paddingBottom: Platform.OS === 'ios' ? 30 : 16,
+  width: '100%',           // Pentru a ocupa întreaga lățime pentru acest modal specific
+  marginTop: 'auto',       // Pentru a poziționa la partea de jos
+},
+pickerModalHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: 16,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.divider,
+},
+pickerModalTitle: {
+  fontSize: 18,
+  fontWeight: 'bold',
+  color: colors.text,
+},
+vehicleOption: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  padding: 16,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.divider,
+},
+selectedVehicleOption: {
+  backgroundColor: colors.primary + '10',
+},
+vehicleOptionText: {
+  fontSize: 16,
+  color: colors.text,
+},
+noVehiclesText: {
+  padding: 16,
+  textAlign: 'center',
+  color: colors.textSecondary,
+  fontStyle: 'italic',
+},
+pickerModalFooter: {
+  padding: 16,
+  borderTopWidth: 1,
+  borderTopColor: colors.divider,
+  alignItems: 'center',
+},
+pickerModalCancelButton: {
+  paddingVertical: 12,
+  paddingHorizontal: 24,
+  borderRadius: 8,
+  backgroundColor: colors.inputBackground,
+},
+pickerModalCancelText: {
+  color: colors.text,
+  fontWeight: 'bold',
+  fontSize: 16,
+},
+
+// Buttons
+button: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 12,
+  paddingHorizontal: 16,
+  borderRadius: 8,
+  marginVertical: 8,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.2,
+  shadowRadius: 1.5,
+  elevation: 2,
+},
+primaryButton: {
+  backgroundColor: colors.primary,
+},
+dangerButton: {
+  backgroundColor: colors.error,
+},
+disabledButton: {
+  opacity: 0.6,
+},
+buttonText: {
+  color: '#fff',
+  fontWeight: 'bold',
+  marginLeft: 8,
+  fontSize: 16,
+},
+
+// Error and Warning
+errorContainer: {
+  backgroundColor: colors.error + '20',
+  padding: 12,
+  borderRadius: 8,
+  marginBottom: 16,
+},
+errorText: {
+  color: colors.error,
+  fontSize: 14,
+},
+warningContainer: {
+  backgroundColor: colors.warning + '20',
+  padding: 12,
+  borderRadius: 8,
+  marginTop: 16,
+},
+warningText: {
+  color: colors.warning,
+  fontSize: 14,
+},
+
+// Vehicle Info
+vehicleInfoContainer: {
+  marginBottom: 8,
+},
+vehicleInfoRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+vehicleInfo: {
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+vehicleIconContainer: {
+  width: 50,
+  height: 50,
+  borderRadius: 25,
+  backgroundColor: colors.primary + '20',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 12,
+},
+vehicleName: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: colors.text,
+},
+vehiclePlate: {
+  fontSize: 14,
+  color: colors.textSecondary,
+},
+shiftDurationContainer: {
+  alignItems: 'center',
+},
+shiftDurationLabel: {
+  fontSize: 12,
+  color: colors.textSecondary,
+  marginBottom: 4,
+},
+shiftDuration: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: colors.text,
+},
+
+// Modal de confirmare
+confirmModalContainer: {
+  backgroundColor: colors.card,
+  borderRadius: 12,
+  width: '80%',
+  padding: 16,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 5,
+},
+confirmModalHeader: {
+  borderBottomWidth: 1,
+  borderBottomColor: colors.divider,
+  paddingBottom: 12,
+  marginBottom: 16,
+},
+confirmModalTitle: {
+  fontSize: 18,
+  fontWeight: 'bold',
+  color: colors.text,
+  textAlign: 'center',
+},
+confirmModalBody: {
+  marginBottom: 16,
+},
+confirmModalText: {
+  fontSize: 16,
+  color: colors.text,
+  textAlign: 'center',
+},
+confirmModalFooter: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+},
+confirmButton: {
+  backgroundColor: colors.success,
+  flex: 1,
+  marginLeft: 8,
+},
+cancelButton: {
+  backgroundColor: colors.error,
+  flex: 1,
+  marginRight: 8,
+},
+confirmButtonText: {
+  color: '#fff',
+  fontWeight: 'bold',
+  textAlign: 'center',
+},
+metaIcon: {
+ marginRight: 2,
+ marginLeft: 8,
+},
+serviceItemMetaText: {
+ fontSize: 12,
+ color: colors.textSecondary,
+ marginRight: 8,
+},
+cancelButtonText: {
+  color: '#fff',
+  fontWeight: 'bold',
+  textAlign: 'center',
+},
+// Date & Time display styles
+dateTimeRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginTop: 4,
+},
+dateTimeText: {
+  fontSize: 12,
+  color: colors.textSecondary,
+  marginLeft: 4,
+}
 });
 
 export default AssistantDashboardScreen;

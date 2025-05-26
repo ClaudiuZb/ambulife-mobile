@@ -61,6 +61,7 @@ const PNCCBookingsScreen = ({ navigation }) => {
   const [bookingToEdit, setBookingToEdit] = useState(null);
   const [showDocumentDeleteConfirm, setShowDocumentDeleteConfirm] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState(null);
+  const [showProcedureConfirm, setShowProcedureConfirm] = useState(false);
   
   // Document states
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -704,6 +705,59 @@ const PNCCBookingsScreen = ({ navigation }) => {
     }
   };
 
+  // Funcționalitate nouă pentru finalizarea unei proceduri
+  const handleCompleteProcedureInit = () => {
+    setShowProcedureConfirm(true);
+  };
+
+  const handleCompleteOneProcedure = async () => {
+    try {
+      if (!currentBooking || !currentBooking._id) return;
+      
+      // Verificăm dacă mai există proceduri de finalizat
+      if (currentBooking.procedureCount <= 1) {
+        // Dacă e ultima procedură, actualizăm statusul la "Finalizat"
+        const updateData = {
+          procedureCount: 0,
+          status: 'completed'
+        };
+        
+        // Doar pentru asistenți - asociază asistentul curent cu programarea
+        if (!isAdmin) {
+          updateData.assistant = user._id;
+        }
+        
+        await axios.put(`/pncc-services/${currentBooking._id}`, updateData);
+        
+        Alert.alert('Succes', 'Ultima procedură a fost finalizată. Programarea a fost marcată ca finalizată.');
+        setShowViewModal(false);
+        fetchBookings();
+        
+      } else {
+        // Scădem o procedură din total
+        const newProcedureCount = currentBooking.procedureCount - 1;
+        
+        const updateData = {
+          procedureCount: newProcedureCount
+        };
+        
+        await axios.put(`/pncc-services/${currentBooking._id}`, updateData);
+        
+        // Actualizăm starea locală pentru a reflecta schimbarea imediat
+        setCurrentBooking({
+          ...currentBooking,
+          procedureCount: newProcedureCount
+        });
+        
+        Alert.alert('Succes', `Procedură finalizată! Au mai rămas ${newProcedureCount} proceduri.`);
+        fetchBookings();
+      }
+    } catch (err) {
+      console.error('Eroare la finalizarea procedurii:', err);
+      Alert.alert('Eroare', 'Nu s-a putut finaliza procedura.');
+    }
+  };
+
   // Filtered bookings
   const filteredBookings = bookings.filter(booking => {
     const matchesSearch = 
@@ -781,1712 +835,1796 @@ const PNCCBookingsScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.bookingFooter}>
-          <View style={styles.footerLeft}>
-            <Ionicons name="calendar" size={14} color={colors.textSecondary} />
-            <Text style={styles.dateText}>
-              {formatDate(item.startDate)}
-            </Text>
-          </View>
-          <View style={styles.footerRight}>
-            <Ionicons name="list" size={14} color={colors.textSecondary} />
-            <Text style={styles.dateText}>
-              {item.procedureCount} proceduri
-            </Text>
-          </View>
-        </View>
+           <View style={styles.footerLeft}>
+             <Ionicons name="calendar" size={14} color={colors.textSecondary} />
+             <Text style={styles.dateText}>
+               {formatDate(item.startDate)}
+             </Text>
+           </View>
+           <View style={styles.footerRight}>
+             <Ionicons name="list" size={14} color={colors.textSecondary} />
+             <Text style={styles.dateText}>
+               {item.procedureCount} proceduri
+             </Text>
+           </View>
+         </View>
 
-        {isAdmin && (
-          <View style={styles.assistantRow}>
-            <Ionicons name="person" size={14} color={colors.textSecondary} />
-            <Text style={styles.assistantText}>{item.assistantName}</Text>
-          </View>
-        )}
+         {isAdmin && (
+           <View style={styles.assistantRow}>
+             <Ionicons name="person" size={14} color={colors.textSecondary} />
+             <Text style={styles.assistantText}>{item.assistantName}</Text>
+           </View>
+         )}
 
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: colors.info }]}
-            onPress={() => handleStatusInit(item)}
-          >
-            <Ionicons name="sync" size={18} color="#fff" />
-          </TouchableOpacity>
-          
-          {(isAdmin || item.assistantId === user._id) && (
-            <>
+         <View style={styles.actionButtons}>
+           <TouchableOpacity 
+             style={[styles.actionButton, { backgroundColor: colors.info }]}
+             onPress={() => handleStatusInit(item)}
+           >
+             <Ionicons name="sync" size={18} color="#fff" />
+           </TouchableOpacity>
+           
+           {(isAdmin || item.assistantId === user._id) && (
+             <>
+               <TouchableOpacity 
+                 style={[styles.actionButton, { backgroundColor: colors.warning }]}
+                 onPress={() => handleEditInit(item)}
+               >
+                 <Ionicons name="pencil" size={18} color="#fff" />
+               </TouchableOpacity>
+               
               <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: colors.warning }]}
-                onPress={() => handleEditInit(item)}
-              >
-                <Ionicons name="pencil" size={18} color="#fff" />
-              </TouchableOpacity>
-              
+                 style={[styles.actionButton, { backgroundColor: colors.error }]}
+                 onPress={() => handleDeleteInit(item)}
+               >
+                 <Ionicons name="trash" size={18} color="#fff" />
+               </TouchableOpacity>
+             </>
+           )}
+         </View>
+       </TouchableOpacity>
+     );
+   };
+
+   const renderFilters = () => (
+     <View style={styles.filtersContainer}>
+       <View style={styles.searchBar}>
+         <Ionicons name="search" size={20} color={colors.textSecondary} />
+         <TextInput
+           style={styles.searchInput}
+           placeholder="Caută pacient, locație..."
+           placeholderTextColor={colors.textSecondary}
+           value={searchTerm}
+           onChangeText={setSearchTerm}
+         />
+       </View>
+
+       <TouchableOpacity 
+         style={styles.filterButton}
+         onPress={() => setShowFilters(!showFilters)}
+       >
+         <Ionicons name="filter" size={20} color={colors.primary} />
+         <Text style={styles.filterButtonText}>Filtre</Text>
+       </TouchableOpacity>
+
+       {showFilters && (
+         <View style={styles.filterOptions}>
+           <View style={styles.filterRow}>
+             <View style={styles.filterColumn}>
+               <Text style={styles.filterLabel}>Status:</Text>
+               <View style={styles.pickerContainer}>
+                 <Picker
+                   selectedValue={statusFilter}
+                   onValueChange={setStatusFilter}
+                   style={styles.picker}
+                 >
+                   <Picker.Item label="Toate" value="" />
+                   {statusOptions.map(option => (
+                     <Picker.Item key={option.value} label={option.value} value={option.value} />
+                   ))}
+                 </Picker>
+               </View>
+             </View>
+             
+             {isAdmin && (
+               <View style={styles.filterColumn}>
+                 <Text style={styles.filterLabel}>Oraș:</Text>
+                 <View style={styles.pickerContainer}>
+                   <Picker
+                     selectedValue={cityFilter}
+                     onValueChange={setCityFilter}
+                     style={styles.picker}
+                   >
+                     <Picker.Item label="Toate" value="" />
+                     <Picker.Item label="Suceava" value="Suceava" />
+                     <Picker.Item label="Botoșani" value="Botoșani" />
+                   </Picker>
+                 </View>
+               </View>
+             )}
+           </View>
+
+           <View style={styles.filterRow}>
+             <View style={styles.filterColumn}>
+               <Text style={styles.filterLabel}>Data:</Text>
+               <TouchableOpacity 
+                 style={styles.dateFilterButton}
+                 onPress={() => setShowDatePicker(true)}
+               >
+                 <Ionicons name="calendar" size={20} color={colors.primary} />
+                 <Text style={styles.dateFilterText}>
+                   {dateFilter ? formatDate(dateFilter) : 'Selectează data'}
+                 </Text>
+                 {dateFilter && (
+                   <TouchableOpacity 
+                     style={styles.clearDateButton}
+                     onPress={() => setDateFilter('')}
+                   >
+                     <Ionicons name="close-circle" size={20} color={colors.error} />
+                   </TouchableOpacity>
+                 )}
+               </TouchableOpacity>
+             </View>
+             
+             <View style={styles.filterColumn}>
+               <Text style={styles.filterLabel}>Sortează după:</Text>
+               <View style={styles.pickerContainer}>
+                 <Picker
+                   selectedValue={sortBy}
+                   onValueChange={setSortBy}
+                   style={styles.picker}
+                 >
+                   <Picker.Item label="Data" value="date" />
+                   <Picker.Item label="Nume pacient" value="patientName" />
+                   <Picker.Item label="Proceduri" value="procedureCount" />
+                 </Picker>
+               </View>
+             </View>
+           </View>
+
+           <View style={styles.filterActions}>
              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: colors.error }]}
-                onPress={() => handleDeleteInit(item)}
-              >
-                <Ionicons name="trash" size={18} color="#fff" />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
-  };
+               style={styles.sortOrderButton}
+               onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+             >
+               <Ionicons 
+                 name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'} 
+                 size={18} 
+                 color={colors.primary} 
+               />
+               <Text style={styles.sortOrderText}>
+                 {sortOrder === 'asc' ? 'Crescător' : 'Descrescător'}
+               </Text>
+             </TouchableOpacity>
+             
+             <TouchableOpacity 
+               style={styles.resetFiltersButton}
+               onPress={() => {
+                 setSearchTerm('');
+                 setCityFilter('');
+                 setDateFilter('');
+                 setStatusFilter('');
+                 setSortBy('date');
+                 setSortOrder('desc');
+               }}
+             >
+               <Ionicons name="refresh" size={18} color={colors.primary} />
+               <Text style={styles.resetFiltersText}>Resetează filtre</Text>
+             </TouchableOpacity>
+           </View>
+         </View>
+       )}
+     </View>
+   );
 
-  const renderFilters = () => (
-    <View style={styles.filtersContainer}>
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={20} color={colors.textSecondary} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Caută pacient, locație..."
-          placeholderTextColor={colors.textSecondary}
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-        />
-      </View>
+   const renderAddModal = () => (
+     <Modal
+       visible={showAddModal}
+       animationType="slide"
+       transparent={true}
+       onRequestClose={() => setShowAddModal(false)}
+     >
+       <KeyboardAvoidingView 
+         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+         style={styles.modalContainer}
+       >
+         <View style={styles.modalContent}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Adaugă programare PNCC</Text>
+             <TouchableOpacity onPress={() => setShowAddModal(false)}>
+               <Ionicons name="close" size={24} color={colors.text} />
+             </TouchableOpacity>
+           </View>
 
-      <TouchableOpacity 
-        style={styles.filterButton}
-        onPress={() => setShowFilters(!showFilters)}
-      >
-        <Ionicons name="filter" size={20} color={colors.primary} />
-        <Text style={styles.filterButtonText}>Filtre</Text>
-      </TouchableOpacity>
+           <ScrollView style={styles.modalBody}>
+             <Text style={styles.inputLabel}>Nume pacient *</Text>
+             <TextInput
+               style={styles.input}
+               value={formData.patientName}
+               onChangeText={(text) => handleInputChange('patientName', text)}
+               placeholder="Ex: Ion Popescu"
+               placeholderTextColor={colors.textSecondary}
+             />
 
-      {showFilters && (
-        <View style={styles.filterOptions}>
-          <View style={styles.filterRow}>
-            <View style={styles.filterColumn}>
-              <Text style={styles.filterLabel}>Status:</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={statusFilter}
-                  onValueChange={setStatusFilter}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Toate" value="" />
-                  {statusOptions.map(option => (
-                    <Picker.Item key={option.value} label={option.value} value={option.value} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-            
-            {isAdmin && (
-              <View style={styles.filterColumn}>
-                <Text style={styles.filterLabel}>Oraș:</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={cityFilter}
-                    onValueChange={setCityFilter}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Toate" value="" />
-                    <Picker.Item label="Suceava" value="Suceava" />
-                    <Picker.Item label="Botoșani" value="Botoșani" />
-                  </Picker>
-                </View>
-              </View>
-            )}
-          </View>
+             <Text style={styles.inputLabel}>Adresă preluare *</Text>
+             <TextInput
+               style={styles.input}
+               value={formData.pickupLocation}
+               onChangeText={(text) => handleInputChange('pickupLocation', text)}
+               placeholder="Ex: Str. Principală nr. 10"
+               placeholderTextColor={colors.textSecondary}
+             />
 
-          <View style={styles.filterRow}>
-            <View style={styles.filterColumn}>
-              <Text style={styles.filterLabel}>Data:</Text>
-              <TouchableOpacity 
-                style={styles.dateFilterButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Ionicons name="calendar" size={20} color={colors.primary} />
-                <Text style={styles.dateFilterText}>
-                  {dateFilter ? formatDate(dateFilter) : 'Selectează data'}
-                </Text>
-                {dateFilter && (
-                  <TouchableOpacity 
-                    style={styles.clearDateButton}
-                    onPress={() => setDateFilter('')}
-                  >
-                    <Ionicons name="close-circle" size={20} color={colors.error} />
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.filterColumn}>
-              <Text style={styles.filterLabel}>Sortează după:</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={sortBy}
-                  onValueChange={setSortBy}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Data" value="date" />
-                  <Picker.Item label="Nume pacient" value="patientName" />
-                  <Picker.Item label="Proceduri" value="procedureCount" />
-                </Picker>
-              </View>
-            </View>
-          </View>
+             <Text style={styles.inputLabel}>Adresă destinație *</Text>
+             <TextInput
+               style={styles.input}
+               value={formData.destinationLocation}
+               onChangeText={(text) => handleInputChange('destinationLocation', text)}
+               placeholder="Ex: Spitalul Județean"
+               placeholderTextColor={colors.textSecondary}
+             />
 
-          <View style={styles.filterActions}>
-            <TouchableOpacity 
-              style={styles.sortOrderButton}
-              onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-            >
-              <Ionicons 
-                name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'} 
-                size={18} 
-                color={colors.primary} 
-              />
-              <Text style={styles.sortOrderText}>
-                {sortOrder === 'asc' ? 'Crescător' : 'Descrescător'}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.resetFiltersButton}
-              onPress={() => {
-                setSearchTerm('');
-                setCityFilter('');
-                setDateFilter('');
-                setStatusFilter('');
-                setSortBy('date');
-                setSortOrder('desc');
-              }}
-            >
-              <Ionicons name="refresh" size={18} color={colors.primary} />
-              <Text style={styles.resetFiltersText}>Resetează filtre</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    </View>
-  );
+             <View style={styles.dateTimeRow}>
+               <View style={styles.dateTimeContainer}>
+                 <Text style={styles.inputLabel}>Data *</Text>
+                 <TouchableOpacity 
+                   style={styles.dateTimeButton}
+                   onPress={() => setShowDatePicker(true)}
+                 >
+                   <Ionicons name="calendar" size={20} color={colors.primary} />
+                   <Text style={styles.dateTimeText}>
+                     {moment(formData.startDate).format('DD.MM.YYYY')}
+                   </Text>
+                 </TouchableOpacity>
+               </View>
 
-  const renderAddModal = () => (
-    <Modal
-      visible={showAddModal}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowAddModal(false)}
-    >
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalContainer}
-      >
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Adaugă programare PNCC</Text>
-            <TouchableOpacity onPress={() => setShowAddModal(false)}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+               <View style={styles.dateTimeContainer}>
+                 <Text style={styles.inputLabel}>Număr proceduri *</Text>
+                 <View style={styles.procedureCountContainer}>
+                   <TouchableOpacity
+                     style={styles.procedureCountButton}
+                     onPress={() => {
+                       if (formData.procedureCount > 1) {
+                         handleInputChange('procedureCount', formData.procedureCount - 1);
+                       }
+                     }}
+                   >
+                     <Ionicons name="remove" size={20} color={colors.primary} />
+                   </TouchableOpacity>
+                   <TextInput
+                     style={styles.procedureCountInput}
+                     value={String(formData.procedureCount)}
+                     onChangeText={(text) => {
+                       const count = parseInt(text, 10);
+                       if (!isNaN(count) && count > 0) {
+                         handleInputChange('procedureCount', count);
+                       } else if (text === '') {
+                         handleInputChange('procedureCount', '');
+                       }
+                     }}
+                     keyboardType="numeric"
+                   />
+                   <TouchableOpacity
+                     style={styles.procedureCountButton}
+                     onPress={() => handleInputChange('procedureCount', formData.procedureCount + 1)}
+                   >
+                     <Ionicons name="add" size={20} color={colors.primary} />
+                   </TouchableOpacity>
+                 </View>
+               </View>
+             </View>
 
-          <ScrollView style={styles.modalBody}>
-            <Text style={styles.inputLabel}>Nume pacient *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.patientName}
-              onChangeText={(text) => handleInputChange('patientName', text)}
-              placeholder="Ex: Ion Popescu"
-              placeholderTextColor={colors.textSecondary}
-            />
+             <Text style={styles.inputLabel}>Oraș *</Text>
+             <View style={styles.pickerContainer}>
+               <Picker
+                 selectedValue={formData.cityId}
+                 onValueChange={(value) => handleInputChange('cityId', value)}
+                 style={styles.picker}
+                 enabled={isAdmin || !user.city}
+               >
+                 <Picker.Item label="Selectați orașul" value="" />
+                 {cities.map(city => (
+                   <Picker.Item key={city._id} label={city.name} value={city._id} />
+                 ))}
+               </Picker>
+             </View>
 
-            <Text style={styles.inputLabel}>Adresă preluare *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.pickupLocation}
-              onChangeText={(text) => handleInputChange('pickupLocation', text)}
-              placeholder="Ex: Str. Principală nr. 10"
-              placeholderTextColor={colors.textSecondary}
-            />
+             <Text style={styles.inputLabel}>Note (opțional)</Text>
+             <TextInput
+               style={[styles.input, styles.textArea]}
+               value={formData.notes}
+               onChangeText={(text) => handleInputChange('notes', text)}
+               placeholder="Note adiționale..."
+               placeholderTextColor={colors.textSecondary}
+               multiline
+               numberOfLines={3}
+             />
 
-            <Text style={styles.inputLabel}>Adresă destinație *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.destinationLocation}
-              onChangeText={(text) => handleInputChange('destinationLocation', text)}
-              placeholder="Ex: Spitalul Județean"
-              placeholderTextColor={colors.textSecondary}
-            />
+             {/* Document Upload Section */}
+             <View style={styles.documentSection}>
+               <Text style={styles.sectionTitle}>
+                 <Ionicons name="attach" size={18} color={colors.primary} /> Documente
+               </Text>
+               
+               <View style={styles.uploadButtons}>
+                 <TouchableOpacity 
+                   style={styles.uploadButton}
+                   onPress={pickDocument}
+                 >
+                   <Ionicons name="document" size={20} color={colors.primary} />
+                   <Text style={styles.uploadButtonText}>Încarcă document</Text>
+                 </TouchableOpacity>
+                 
+                 <TouchableOpacity 
+                   style={styles.uploadButton}
+                   onPress={pickImage}
+                 >
+                   <Ionicons name="camera" size={20} color={colors.primary} />
+                   <Text style={styles.uploadButtonText}>Fă o poză</Text>
+                 </TouchableOpacity>
+               </View>
 
-            <View style={styles.dateTimeRow}>
-              <View style={styles.dateTimeContainer}>
-                <Text style={styles.inputLabel}>Data *</Text>
-                <TouchableOpacity 
-                  style={styles.dateTimeButton}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Ionicons name="calendar" size={20} color={colors.primary} />
-                  <Text style={styles.dateTimeText}>
-                    {moment(formData.startDate).format('DD.MM.YYYY')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+               {selectedDocument && (
+                 <View style={styles.selectedDocument}>
+                   <Ionicons 
+                     name={getFileIcon(selectedDocument.type)} 
+                     size={20} 
+                     color={colors.primary} 
+                   />
+                   <Text style={styles.selectedDocumentName} numberOfLines={1}>
+                     {selectedDocument.name}
+                   </Text>
+                   <TouchableOpacity onPress={() => setSelectedDocument(null)}>
+                     <Ionicons name="close-circle" size={20} color={colors.error} />
+                   </TouchableOpacity>
+                 </View>
+               )}
+             </View>
+           </ScrollView>
 
-              <View style={styles.dateTimeContainer}>
-                <Text style={styles.inputLabel}>Număr proceduri *</Text>
-                <View style={styles.procedureCountContainer}>
-                  <TouchableOpacity
-                    style={styles.procedureCountButton}
-                    onPress={() => {
-                      if (formData.procedureCount > 1) {
-                        handleInputChange('procedureCount', formData.procedureCount - 1);
-                      }
-                    }}
-                  >
-                    <Ionicons name="remove" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                  <TextInput
-                    style={styles.procedureCountInput}
-                    value={String(formData.procedureCount)}
-                    onChangeText={(text) => {
-                      const count = parseInt(text, 10);
-                      if (!isNaN(count) && count > 0) {
-                        handleInputChange('procedureCount', count);
-                      } else if (text === '') {
-                        handleInputChange('procedureCount', '');
-                      }
-                    }}
-                    keyboardType="numeric"
-                  />
-                  <TouchableOpacity
-                    style={styles.procedureCountButton}
-                    onPress={() => handleInputChange('procedureCount', formData.procedureCount + 1)}
-                  >
-                    <Ionicons name="add" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
+           <View style={styles.modalFooter}>
+             <TouchableOpacity 
+               style={[styles.modalButton, styles.cancelButton]}
+               onPress={() => setShowAddModal(false)}
+             >
+               <Text style={styles.cancelButtonText}>Anulează</Text>
+             </TouchableOpacity>
+             <TouchableOpacity 
+               style={[styles.modalButton, styles.submitButton]}
+               onPress={handleSubmit}
+             >
+               <Text style={styles.submitButtonText}>Salvează</Text>
+             </TouchableOpacity>
+           </View>
+         </View>
+       </KeyboardAvoidingView>
 
-            <Text style={styles.inputLabel}>Oraș *</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={formData.cityId}
-                onValueChange={(value) => handleInputChange('cityId', value)}
-                style={styles.picker}
-                enabled={isAdmin || !user.city}
-              >
-                <Picker.Item label="Selectați orașul" value="" />
-                {cities.map(city => (
-                  <Picker.Item key={city._id} label={city.name} value={city._id} />
-                ))}
-              </Picker>
-            </View>
+       {showDatePicker && (
+         <DateTimePicker
+           value={formData.startDate}
+           mode="date"
+           display="default"
+           onChange={(event, selectedDate) => {
+             setShowDatePicker(false);
+             if (selectedDate) {
+               handleInputChange('startDate', selectedDate);
+             }
+           }}
+         />
+       )}
+     </Modal>
+   );
 
-            <Text style={styles.inputLabel}>Note (opțional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.notes}
-              onChangeText={(text) => handleInputChange('notes', text)}
-              placeholder="Note adiționale..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={3}
-            />
+   const renderEditModal = () => (
+     <Modal
+       visible={showEditModal}
+       animationType="slide"
+       transparent={true}
+       onRequestClose={() => setShowEditModal(false)}
+     >
+       <KeyboardAvoidingView 
+         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+         style={styles.modalContainer}
+       >
+         <View style={styles.modalContent}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Editează programare PNCC</Text>
+             <TouchableOpacity onPress={() => setShowEditModal(false)}>
+               <Ionicons name="close" size={24} color={colors.text} />
+             </TouchableOpacity>
+           </View>
 
-            {/* Document Upload Section */}
-            <View style={styles.documentSection}>
-              <Text style={styles.sectionTitle}>
-                <Ionicons name="attach" size={18} color={colors.primary} /> Documente
-              </Text>
-              
-              <View style={styles.uploadButtons}>
-                <TouchableOpacity 
-                  style={styles.uploadButton}
-                  onPress={pickDocument}
-                >
-                  <Ionicons name="document" size={20} color={colors.primary} />
-                  <Text style={styles.uploadButtonText}>Încarcă document</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.uploadButton}
-                  onPress={pickImage}
-                >
-                  <Ionicons name="camera" size={20} color={colors.primary} />
-                  <Text style={styles.uploadButtonText}>Fă o poză</Text>
-                </TouchableOpacity>
-              </View>
+           <ScrollView style={styles.modalBody}>
+             <Text style={styles.inputLabel}>Nume pacient *</Text>
+             <TextInput
+               style={styles.input}
+               value={formData.patientName}
+               onChangeText={(text) => handleInputChange('patientName', text)}
+               placeholder="Ex: Ion Popescu"
+               placeholderTextColor={colors.textSecondary}
+             />
 
-              {selectedDocument && (
-                <View style={styles.selectedDocument}>
-                  <Ionicons 
-                    name={getFileIcon(selectedDocument.type)} 
-                    size={20} 
-                    color={colors.primary} 
-                  />
-                  <Text style={styles.selectedDocumentName} numberOfLines={1}>
-                    {selectedDocument.name}
-                  </Text>
-                  <TouchableOpacity onPress={() => setSelectedDocument(null)}>
-                    <Ionicons name="close-circle" size={20} color={colors.error} />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </ScrollView>
+             <Text style={styles.inputLabel}>Adresă preluare *</Text>
+             <TextInput
+               style={styles.input}
+               value={formData.pickupLocation}
+               onChangeText={(text) => handleInputChange('pickupLocation', text)}
+               placeholder="Ex: Str. Principală nr. 10"
+               placeholderTextColor={colors.textSecondary}
+             />
 
-          <View style={styles.modalFooter}>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => setShowAddModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Anulează</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.submitButton]}
-              onPress={handleSubmit}
-            >
-              <Text style={styles.submitButtonText}>Salvează</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+             <Text style={styles.inputLabel}>Adresă destinație *</Text>
+             <TextInput
+               style={styles.input}
+               value={formData.destinationLocation}
+               onChangeText={(text) => handleInputChange('destinationLocation', text)}
+               placeholder="Ex: Spitalul Județean"
+               placeholderTextColor={colors.textSecondary}
+             />
 
-      {showDatePicker && (
-        <DateTimePicker
-          value={formData.startDate}
-          mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowDatePicker(false);
-            if (selectedDate) {
-              handleInputChange('startDate', selectedDate);
-            }
-          }}
-        />
-      )}
-    </Modal>
-  );
+             <View style={styles.dateTimeRow}>
+               <View style={styles.dateTimeContainer}>
+                 <Text style={styles.inputLabel}>Data *</Text>
+                 <TouchableOpacity 
+                   style={styles.dateTimeButton}
+                   onPress={() => setShowDatePicker(true)}
+                 >
+                   <Ionicons name="calendar" size={20} color={colors.primary} />
+                   <Text style={styles.dateTimeText}>
+                     {moment(formData.startDate).format('DD.MM.YYYY')}
+                   </Text>
+                 </TouchableOpacity>
+               </View>
 
-  const renderEditModal = () => (
-    <Modal
-      visible={showEditModal}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowEditModal(false)}
-    >
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalContainer}
-      >
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Editează programare PNCC</Text>
-            <TouchableOpacity onPress={() => setShowEditModal(false)}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+               <View style={styles.dateTimeContainer}>
+                 <Text style={styles.inputLabel}>Număr proceduri *</Text>
+                 <View style={styles.procedureCountContainer}>
+                   <TouchableOpacity
+                     style={styles.procedureCountButton}
+                     onPress={() => {
+                       if (formData.procedureCount > 1) {
+                         handleInputChange('procedureCount', formData.procedureCount - 1);
+                       }
+                     }}
+                   >
+                     <Ionicons name="remove" size={20} color={colors.primary} />
+                   </TouchableOpacity>
+                   <TextInput
+                     style={styles.procedureCountInput}
+                     value={String(formData.procedureCount)}
+                     onChangeText={(text) => {
+                       const count = parseInt(text, 10);
+                       if (!isNaN(count) && count > 0) {
+                         handleInputChange('procedureCount', count);
+                       } else if (text === '') {
+                         handleInputChange('procedureCount', '');
+                       }
+                     }}
+                     keyboardType="numeric"
+                   />
+                   <TouchableOpacity
+                     style={styles.procedureCountButton}
+                     onPress={() => handleInputChange('procedureCount', formData.procedureCount + 1)}
+                   >
+                     <Ionicons name="add" size={20} color={colors.primary} />
+                   </TouchableOpacity>
+                 </View>
+               </View>
+             </View>
 
-          <ScrollView style={styles.modalBody}>
-            <Text style={styles.inputLabel}>Nume pacient *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.patientName}
-              onChangeText={(text) => handleInputChange('patientName', text)}
-              placeholder="Ex: Ion Popescu"
-              placeholderTextColor={colors.textSecondary}
-            />
+             <Text style={styles.inputLabel}>Status *</Text>
+             <View style={styles.pickerContainer}>
+               <Picker
+                 selectedValue={formData.status}
+                 onValueChange={(value) => handleInputChange('status', value)}
+                 style={styles.picker}
+               >
+                 {statusOptions.map(option => (
+                   <Picker.Item key={option.value} label={option.value} value={option.value} />
+                 ))}
+               </Picker>
+             </View>
 
-            <Text style={styles.inputLabel}>Adresă preluare *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.pickupLocation}
-              onChangeText={(text) => handleInputChange('pickupLocation', text)}
-              placeholder="Ex: Str. Principală nr. 10"
-              placeholderTextColor={colors.textSecondary}
-            />
+             <Text style={styles.inputLabel}>Oraș *</Text>
+             <View style={styles.pickerContainer}>
+               <Picker
+                 selectedValue={formData.cityId}
+                 onValueChange={(value) => handleInputChange('cityId', value)}
+                 style={styles.picker}
+                 enabled={isAdmin || !user.city}
+               >
+                 <Picker.Item label="Selectați orașul" value="" />
+                 {cities.map(city => (
+                   <Picker.Item key={city._id} label={city.name} value={city._id} />
+                 ))}
+               </Picker>
+             </View>
 
-            <Text style={styles.inputLabel}>Adresă destinație *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.destinationLocation}
-              onChangeText={(text) => handleInputChange('destinationLocation', text)}
-              placeholder="Ex: Spitalul Județean"
-              placeholderTextColor={colors.textSecondary}
-            />
+             {isAdmin && (
+               <>
+                 <Text style={styles.inputLabel}>Asistent</Text>
+                 <View style={styles.pickerContainer}>
+                   <Picker
+                     selectedValue={formData.brigadeEmployeeId}
+                     onValueChange={(value) => handleInputChange('brigadeEmployeeId', value)}
+                     style={styles.picker}
+                   >
+                     <Picker.Item label="Nealocat" value="" />
+                     {brigadeMembers.map(member => (
+                       <Picker.Item 
+                         key={member._id} 
+                         label={`${member.name} (${member.city})`} 
+                         value={member._id} 
+                       />
+                     ))}
+                   </Picker>
+                 </View>
+               </>
+             )}
 
-            <View style={styles.dateTimeRow}>
-              <View style={styles.dateTimeContainer}>
-                <Text style={styles.inputLabel}>Data *</Text>
-                <TouchableOpacity 
-                  style={styles.dateTimeButton}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Ionicons name="calendar" size={20} color={colors.primary} />
-                  <Text style={styles.dateTimeText}>
-                    {moment(formData.startDate).format('DD.MM.YYYY')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+             <Text style={styles.inputLabel}>Note (opțional)</Text>
+             <TextInput
+               style={[styles.input, styles.textArea]}
+               value={formData.notes}
+               onChangeText={(text) => handleInputChange('notes', text)}
+               placeholder="Note adiționale..."
+               placeholderTextColor={colors.textSecondary}
+               multiline
+               numberOfLines={3}
+             />
 
-              <View style={styles.dateTimeContainer}>
-                <Text style={styles.inputLabel}>Număr proceduri *</Text>
-                <View style={styles.procedureCountContainer}>
-                  <TouchableOpacity
-                    style={styles.procedureCountButton}
-                    onPress={() => {
-                      if (formData.procedureCount > 1) {
-                        handleInputChange('procedureCount', formData.procedureCount - 1);
-                      }
-                    }}
-                  >
-                    <Ionicons name="remove" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                  <TextInput
-                    style={styles.procedureCountInput}
-                    value={String(formData.procedureCount)}
-                    onChangeText={(text) => {
-                      const count = parseInt(text, 10);
-                      if (!isNaN(count) && count > 0) {
-                        handleInputChange('procedureCount', count);
-                      } else if (text === '') {
-                        handleInputChange('procedureCount', '');
-                      }
-                    }}
-                    keyboardType="numeric"
-                  />
-                  <TouchableOpacity
-                    style={styles.procedureCountButton}
-                    onPress={() => handleInputChange('procedureCount', formData.procedureCount + 1)}
-                  >
-                    <Ionicons name="add" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
+             <View style={styles.infoBox}>
+               <Ionicons name="information-circle" size={20} color={colors.info} />
+               <Text style={styles.infoText}>
+                 Documentele pot fi gestionate din vizualizarea detaliată a programării.
+               </Text>
+             </View>
+           </ScrollView>
 
-            <Text style={styles.inputLabel}>Status *</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={formData.status}
-                onValueChange={(value) => handleInputChange('status', value)}
-                style={styles.picker}
-              >
-                {statusOptions.map(option => (
-                  <Picker.Item key={option.value} label={option.value} value={option.value} />
-                ))}
-              </Picker>
-            </View>
+           <View style={styles.modalFooter}>
+             <TouchableOpacity 
+               style={[styles.modalButton, styles.cancelButton]}
+               onPress={() => setShowEditModal(false)}
+             >
+               <Text style={styles.cancelButtonText}>Anulează</Text>
+             </TouchableOpacity>
+             <TouchableOpacity 
+               style={[styles.modalButton, styles.submitButton]}
+               onPress={handleEditSubmit}
+             >
+               <Text style={styles.submitButtonText}>Salvează</Text>
+             </TouchableOpacity>
+           </View>
+         </View>
+       </KeyboardAvoidingView>
 
-            <Text style={styles.inputLabel}>Oraș *</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={formData.cityId}
-                onValueChange={(value) => handleInputChange('cityId', value)}
-                style={styles.picker}
-                enabled={isAdmin || !user.city}
-              >
-                <Picker.Item label="Selectați orașul" value="" />
-                {cities.map(city => (
-                  <Picker.Item key={city._id} label={city.name} value={city._id} />
-                ))}
-              </Picker>
-            </View>
+       {showDatePicker && (
+         <DateTimePicker
+           value={formData.startDate}
+           mode="date"
+           display="default"
+           onChange={(event, selectedDate) => {
+             setShowDatePicker(false);
+             if (selectedDate) {
+               handleInputChange('startDate', selectedDate);
+             }
+           }}
+         />
+       )}
+     </Modal>
+   );
 
-            {isAdmin && (
-              <>
-                <Text style={styles.inputLabel}>Asistent</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={formData.brigadeEmployeeId}
-                    onValueChange={(value) => handleInputChange('brigadeEmployeeId', value)}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Nealocat" value="" />
-                    {brigadeMembers.map(member => (
-                      <Picker.Item 
-                        key={member._id} 
-                        label={`${member.name} (${member.city})`} 
-                        value={member._id} 
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              </>
-            )}
+   const renderViewModal = () => (
+     <Modal
+       visible={showViewModal}
+       animationType="slide"
+       transparent={true}
+       onRequestClose={() => setShowViewModal(false)}
+     >
+       <View style={styles.modalContainer}>
+         <View style={styles.modalContent}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Detalii programare PNCC</Text>
+             <TouchableOpacity onPress={() => setShowViewModal(false)}>
+               <Ionicons name="close" size={24} color={colors.text} />
+             </TouchableOpacity>
+           </View>
 
-            <Text style={styles.inputLabel}>Note (opțional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.notes}
-              onChangeText={(text) => handleInputChange('notes', text)}
-              placeholder="Note adiționale..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={3}
-            />
+           {currentBooking && (
+             <ScrollView style={styles.modalBody}>
+               <View style={styles.detailSection}>
+                 <Text style={styles.detailSectionTitle}>Informații pacient</Text>
+                 <View style={styles.detailRow}>
+                   <Ionicons name="person" size={18} color={colors.textSecondary} />
+                   <Text style={styles.detailText}>{currentBooking.patientName}</Text>
+                 </View>
+               </View>
 
-            <View style={styles.infoBox}>
-              <Ionicons name="information-circle" size={20} color={colors.info} />
-              <Text style={styles.infoText}>
-                Documentele pot fi gestionate din vizualizarea detaliată a programării.
-              </Text>
-            </View>
-          </ScrollView>
+               <View style={styles.detailSection}>
+                 <Text style={styles.detailSectionTitle}>Locații</Text>
+                 <View style={styles.detailRow}>
+                   <Ionicons name="location" size={18} color={colors.primary} />
+                   <Text style={styles.detailText}>{currentBooking.pickupLocation}</Text>
+                 </View>
+                 <View style={styles.detailRow}>
+                   <Ionicons name="arrow-forward" size={18} color={colors.textSecondary} />
+                   <Text style={styles.detailText}>{currentBooking.destinationLocation}</Text>
+                 </View>
+               </View>
 
-          <View style={styles.modalFooter}>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => setShowEditModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Anulează</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.submitButton]}
-              onPress={handleEditSubmit}
-            >
-              <Text style={styles.submitButtonText}>Salvează</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+               <View style={styles.detailSection}>
+                 <Text style={styles.detailSectionTitle}>Programare</Text>
+                 <View style={styles.detailRow}>
+                   <Ionicons name="calendar" size={18} color={colors.textSecondary} />
+                   <Text style={styles.detailText}>
+                     {formatDate(currentBooking.startDate)}
+                   </Text>
+                 </View>
+                 <View style={styles.detailRow}>
+                   <Ionicons name="list" size={18} color={colors.textSecondary} />
+                   <Text style={styles.detailText}>
+                     {currentBooking.procedureCount} proceduri
+                   </Text>
+                 </View>
+                 <View style={styles.detailRow}>
+                   <Ionicons name="business" size={18} color={colors.textSecondary} />
+                   <Text style={styles.detailText}>{currentBooking.city}</Text>
+                 </View>
+               </View>
 
-      {showDatePicker && (
-        <DateTimePicker
-          value={formData.startDate}
-          mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowDatePicker(false);
-            if (selectedDate) {
-              handleInputChange('startDate', selectedDate);
-            }
-          }}
-        />
-      )}
-    </Modal>
-  );
+               <View style={styles.detailSection}>
+                 <Text style={styles.detailSectionTitle}>Status & Asistent</Text>
+                 <View style={styles.detailRow}>
+                   <Ionicons 
+                     name={getStatusStyle(currentBooking.status).icon} 
+                     size={18} 
+                     color={getStatusStyle(currentBooking.status).color} 
+                   />
+                   <Text style={styles.detailText}>{currentBooking.status}</Text>
+                 </View>
+                 <View style={styles.detailRow}>
+                   <Ionicons name="person" size={18} color={colors.info} />
+                   <Text style={styles.detailText}>{currentBooking.assistantName}</Text>
+                 </View>
+                 
+                 {/* Buton pentru finalizare procedură */}
+                 {currentBooking.status !== 'Finalizat' && currentBooking.procedureCount > 0 && (
+                   <TouchableOpacity
+                     style={styles.completeProcedureButton}
+                     onPress={handleCompleteProcedureInit}
+                   >
+                     <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                     <Text style={styles.completeProcedureText}>Finalizează o procedură</Text>
+                   </TouchableOpacity>
+                 )}
+               </View>
 
-  const renderViewModal = () => (
-    <Modal
-      visible={showViewModal}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowViewModal(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Detalii programare PNCC</Text>
-            <TouchableOpacity onPress={() => setShowViewModal(false)}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+               {currentBooking.notes && (
+                 <View style={styles.detailSection}>
+                   <Text style={styles.detailSectionTitle}>Note</Text>
+                   <Text style={styles.detailText}>{currentBooking.notes}</Text>
+                 </View>
+               )}
 
-          {currentBooking && (
-            <ScrollView style={styles.modalBody}>
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Informații pacient</Text>
-                <View style={styles.detailRow}>
-                  <Ionicons name="person" size={18} color={colors.textSecondary} />
-                  <Text style={styles.detailText}>{currentBooking.patientName}</Text>
-                </View>
-              </View>
+               {/* Documents Section */}
+               <View style={styles.detailSection}>
+                 <View style={styles.documentHeader}>
+                   <Text style={styles.detailSectionTitle}>Documente</Text>
+                   <View style={styles.documentActions}>
+                     <TouchableOpacity 
+                       style={styles.documentActionButton}
+                       onPress={pickDocument}
+                     >
+                       <Ionicons name="document" size={18} color={colors.primary} />
+                     </TouchableOpacity>
+                     <TouchableOpacity 
+                       style={styles.documentActionButton}
+                       onPress={pickImage}
+                     >
+                       <Ionicons name="camera" size={18} color={colors.primary} />
+                     </TouchableOpacity>
+                   </View>
+                 </View>
 
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Locații</Text>
-                <View style={styles.detailRow}>
-                  <Ionicons name="location" size={18} color={colors.primary} />
-                  <Text style={styles.detailText}>{currentBooking.pickupLocation}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Ionicons name="arrow-forward" size={18} color={colors.textSecondary} />
-                  <Text style={styles.detailText}>{currentBooking.destinationLocation}</Text>
-                </View>
-              </View>
+                 {selectedDocument && (
+                   <View style={styles.uploadProgress}>
+                     <View style={styles.selectedDocument}>
+                       <Ionicons 
+                         name={getFileIcon(selectedDocument.type)} 
+                         size={20} 
+                         color={colors.primary} 
+                       />
+                       <Text style={styles.selectedDocumentName} numberOfLines={1}>
+                         {selectedDocument.name}
+                       </Text>
+                     </View>
+                     <View style={styles.uploadActions}>
+                       <TouchableOpacity 
+                         style={[styles.uploadActionButton, { backgroundColor: colors.primary }]}
+                         onPress={() => uploadDocument(currentBooking._id)}
+                         disabled={isUploading}
+                       >
+                         <Text style={styles.uploadActionText}>
+                           {isUploading ? 'Se încarcă...' : 'Încarcă'}
+                         </Text>
+                       </TouchableOpacity>
+                       <TouchableOpacity 
+                         style={[styles.uploadActionButton, { backgroundColor: colors.error }]}
+                         onPress={() => setSelectedDocument(null)}
+                       >
+                         <Ionicons name="trash" size={16} color="#fff" />
+                       </TouchableOpacity>
+                     </View>
+                     {isUploading && (
+                       <View style={styles.progressBar}>
+                         <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+                       </View>
+                     )}
+                   </View>
+                 )}
 
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Programare</Text>
-                <View style={styles.detailRow}>
-                  <Ionicons name="calendar" size={18} color={colors.textSecondary} />
-                  <Text style={styles.detailText}>
-                    {formatDate(currentBooking.startDate)}
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Ionicons name="list" size={18} color={colors.textSecondary} />
-                  <Text style={styles.detailText}>
-                    {currentBooking.procedureCount} proceduri
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Ionicons name="business" size={18} color={colors.textSecondary} />
-                  <Text style={styles.detailText}>{currentBooking.city}</Text>
-                </View>
-              </View>
+                 {currentBooking.documents && currentBooking.documents.length > 0 ? (
+                   <View style={styles.documentsList}>
+                     {currentBooking.documents.map((doc, index) => (
+                       <View key={doc._id || index} style={styles.documentItem}>
+                         <View style={styles.documentInfo}>
+                           <Ionicons 
+                             name={getFileIcon(doc.mimetype)} 
+                             size={20} 
+                             color={colors.primary} 
+                           />
+                           <View style={styles.documentDetails}>
+                             <Text style={styles.documentName} numberOfLines={1}>
+                               {doc.name || 'Document'}
+                             </Text>
+                             <Text style={styles.documentSize}>
+                               {formatFileSize(doc.size)}
+                             </Text>
+                           </View>
+                         </View>
+                         <View style={styles.documentItemActions}>
+                           <TouchableOpacity 
+                             style={styles.documentItemButton}
+                             onPress={() => downloadDocument(currentBooking._id, doc._id, doc.name)}
+                           >
+                             <Ionicons name="download" size={18} color={colors.primary} />
+                           </TouchableOpacity>
+                           <TouchableOpacity 
+                             style={styles.documentItemButton}
+                             onPress={() => handleDeleteDocumentInit(currentBooking._id, doc._id)}
+                           >
+                             <Ionicons name="trash" size={18} color={colors.error} />
+                           </TouchableOpacity>
+                         </View>
+                       </View>
+                     ))}
+                   </View>
+                 ) : (
+                   <View style={styles.noDocuments}>
+                     <Ionicons name="document-text-outline" size={48} color={colors.textSecondary} />
+                     <Text style={styles.noDocumentsText}>
+                       Nu există documente atașate
+                     </Text>
+                   </View>
+                 )}
+               </View>
+             </ScrollView>
+           )}
+         </View>
+       </View>
+     </Modal>
+   );
 
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Status & Asistent</Text>
-                <View style={styles.detailRow}>
-                  <Ionicons 
-                    name={getStatusStyle(currentBooking.status).icon} 
-                    size={18} 
-                    color={getStatusStyle(currentBooking.status).color} 
-                  />
-                  <Text style={styles.detailText}>{currentBooking.status}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Ionicons name="person" size={18} color={colors.info} />
-                  <Text style={styles.detailText}>{currentBooking.assistantName}</Text>
-                </View>
-              </View>
+   const renderStatusModal = () => (
+     <Modal
+       visible={showStatusModal}
+       animationType="slide"
+       transparent={true}
+       onRequestClose={() => setShowStatusModal(false)}
+     >
+       <View style={styles.modalContainer}>
+         <View style={styles.modalContent}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Actualizare status</Text>
+             <TouchableOpacity onPress={() => setShowStatusModal(false)}>
+               <Ionicons name="close" size={24} color={colors.text} />
+             </TouchableOpacity>
+           </View>
 
-              {currentBooking.notes && (
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>Note</Text>
-                  <Text style={styles.detailText}>{currentBooking.notes}</Text>
-                </View>
-              )}
+        {bookingToUpdateStatus && (
+             <View style={styles.modalBody}>
+               <Text style={styles.statusModalText}>
+                 Actualizați statusul pentru programarea pacientului{' '}
+                 <Text style={styles.boldText}>{bookingToUpdateStatus.patientName}</Text>:
+               </Text>
 
-              {/* Documents Section */}
-              <View style={styles.detailSection}>
-                <View style={styles.documentHeader}>
-                  <Text style={styles.detailSectionTitle}>Documente</Text>
-                  <View style={styles.documentActions}>
-                    <TouchableOpacity 
-                      style={styles.documentActionButton}
-                      onPress={pickDocument}
-                    >
-                      <Ionicons name="document" size={18} color={colors.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.documentActionButton}
-                      onPress={pickImage}
-                    >
-                      <Ionicons name="camera" size={18} color={colors.primary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+               <View style={styles.userInfoPanel}>
+                 <Text style={styles.userName}>
+                   <Text style={styles.boldText}>{user.name}</Text> {user.role === 'admin' ? '(Administrator)' : '(Asistent)'}
+                 </Text>
+                 <Text style={styles.userDetails}>
+                   <Text style={styles.smallText}>Oraș: {typeof user.city === 'object' ? user.city.name : 
+                               (typeof user.city === 'string' && user.city === '6823053af3c9fed99da59f39') ? 'Suceava' :
+                               (typeof user.city === 'string' && user.city === '6823053af3c9fed99da59f3a') ? 'Botoșani' : 
+                               'Necunoscut'}</Text>
+                 </Text>
+               </View>
 
-                {selectedDocument && (
-                  <View style={styles.uploadProgress}>
-                    <View style={styles.selectedDocument}>
-                      <Ionicons 
-                        name={getFileIcon(selectedDocument.type)} 
-                        size={20} 
-                        color={colors.primary} 
-                      />
-                      <Text style={styles.selectedDocumentName} numberOfLines={1}>
-                        {selectedDocument.name}
-                      </Text>
-                    </View>
-                    <View style={styles.uploadActions}>
-                      <TouchableOpacity 
-                        style={[styles.uploadActionButton, { backgroundColor: colors.primary }]}
-                        onPress={() => uploadDocument(currentBooking._id)}
-                        disabled={isUploading}
-                      >
-                        <Text style={styles.uploadActionText}>
-                          {isUploading ? 'Se încarcă...' : 'Încarcă'}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={[styles.uploadActionButton, { backgroundColor: colors.error }]}
-                        onPress={() => setSelectedDocument(null)}
-                      >
-                        <Ionicons name="trash" size={16} color="#fff" />
-                      </TouchableOpacity>
-                    </View>
-                    {isUploading && (
-                      <View style={styles.progressBar}>
-                        <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
-                      </View>
-                    )}
-                  </View>
-                )}
+               <View style={styles.statusOptions}>
+                 {statusOptions.map(option => (
+                   <TouchableOpacity
+                     key={option.value}
+                     style={[
+                       styles.statusOption,
+                       { backgroundColor: option.color }
+                     ]}
+                     onPress={() => handleStatusUpdate(option.value)}
+                   >
+                     <Ionicons name={option.icon} size={24} color="#fff" />
+                     <Text style={styles.statusOptionText}>{option.value}</Text>
+                   </TouchableOpacity>
+                 ))}
+               </View>
+             </View>
+           )}
+         </View>
+       </View>
+     </Modal>
+   );
 
-                {currentBooking.documents && currentBooking.documents.length > 0 ? (
-                  <View style={styles.documentsList}>
-                    {currentBooking.documents.map((doc, index) => (
-                      <View key={doc._id || index} style={styles.documentItem}>
-                        <View style={styles.documentInfo}>
-                          <Ionicons 
-                            name={getFileIcon(doc.mimetype)} 
-                            size={20} 
-                            color={colors.primary} 
-                          />
-                          <View style={styles.documentDetails}>
-                            <Text style={styles.documentName} numberOfLines={1}>
-                              {doc.name || 'Document'}
-                            </Text>
-                            <Text style={styles.documentSize}>
-                              {formatFileSize(doc.size)}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.documentItemActions}>
-                          <TouchableOpacity 
-                            style={styles.documentItemButton}
-                            onPress={() => downloadDocument(currentBooking._id, doc._id, doc.name)}
-                          >
-                            <Ionicons name="download" size={18} color={colors.primary} />
-                          </TouchableOpacity>
-                          <TouchableOpacity 
-                            style={styles.documentItemButton}
-                            onPress={() => handleDeleteDocumentInit(currentBooking._id, doc._id)}
-                          >
-                            <Ionicons name="trash" size={18} color={colors.error} />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.noDocuments}>
-                    <Ionicons name="document-text-outline" size={48} color={colors.textSecondary} />
-                    <Text style={styles.noDocumentsText}>
-                      Nu există documente atașate
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
+   const renderDeleteConfirmModal = () => (
+     <Modal
+       visible={showDeleteConfirm}
+       animationType="slide"
+       transparent={true}
+       onRequestClose={() => setShowDeleteConfirm(false)}
+     >
+       <View style={styles.modalContainer}>
+         <View style={styles.confirmModalContent}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Confirmare ștergere</Text>
+           </View>
+           
+           {bookingToDelete && (
+             <View style={styles.modalBody}>
+               <Text style={styles.confirmText}>
+                 Sunteți sigur că doriți să ștergeți programarea PNCC pentru <Text style={styles.boldText}>{bookingToDelete.patientName}</Text> din data <Text style={styles.boldText}>{formatDate(bookingToDelete.startDate)}</Text>?
+               </Text>
+               
+               {bookingToDelete.documents && bookingToDelete.documents.length > 0 && (
+                 <View style={styles.warningBox}>
+                   <Ionicons name="warning" size={20} color={colors.error} />
+                   <Text style={styles.warningText}>
+                     Această programare are {bookingToDelete.documents.length} documente atașate care vor fi șterse permanent.
+                   </Text>
+                 </View>
+               )}
+               
+               <View style={styles.confirmButtons}>
+                 <TouchableOpacity 
+                   style={[styles.confirmButton, styles.cancelButton]}
+                   onPress={() => setShowDeleteConfirm(false)}
+                 >
+                   <Text style={styles.cancelButtonText}>Anulează</Text>
+                 </TouchableOpacity>
+                 
+                 <TouchableOpacity 
+                   style={[styles.confirmButton, styles.deleteButton]}
+                   onPress={handleDeleteConfirm}
+                 >
+                   <Ionicons name="trash" size={18} color="#fff" className="me-1" />
+                   <Text style={styles.deleteButtonText}>Șterge programare</Text>
+                 </TouchableOpacity>
+               </View>
+             </View>
+           )}
+         </View>
+       </View>
+     </Modal>
+   );
 
-  const renderStatusModal = () => (
-    <Modal
-      visible={showStatusModal}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowStatusModal(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Actualizare status</Text>
-            <TouchableOpacity onPress={() => setShowStatusModal(false)}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+   const renderDocumentDeleteConfirmModal = () => (
+     <Modal
+       visible={showDocumentDeleteConfirm}
+       animationType="slide"
+       transparent={true}
+       onRequestClose={() => setShowDocumentDeleteConfirm(false)}
+     >
+       <View style={styles.modalContainer}>
+         <View style={styles.confirmModalContent}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Confirmare ștergere document</Text>
+           </View>
+           
+           <View style={styles.modalBody}>
+             <Text style={styles.confirmText}>
+               Sunteți sigur că doriți să ștergeți acest document? Această acțiune este permanentă și nu poate fi anulată.
+             </Text>
+             
+             <View style={styles.confirmButtons}>
+               <TouchableOpacity 
+                 style={[styles.confirmButton, styles.cancelButton]}
+                 onPress={() => setShowDocumentDeleteConfirm(false)}
+               >
+                 <Text style={styles.cancelButtonText}>Anulează</Text>
+               </TouchableOpacity>
+               
+               <TouchableOpacity 
+                 style={[styles.confirmButton, styles.deleteButton]}
+                 onPress={handleDeleteDocumentConfirm}
+               >
+                 <Ionicons name="trash" size={18} color="#fff" className="me-1" />
+                 <Text style={styles.deleteButtonText}>Șterge document</Text>
+               </TouchableOpacity>
+             </View>
+           </View>
+         </View>
+       </View>
+     </Modal>
+   );
 
-          {bookingToUpdateStatus && (
-            <View style={styles.modalBody}>
-              <Text style={styles.statusModalText}>
-                Actualizați statusul pentru programarea pacientului{' '}
-                <Text style={styles.boldText}>{bookingToUpdateStatus.patientName}</Text>:
-              </Text>
+   // Modal pentru confirmarea finalizării unei proceduri
+   const renderProcedureConfirmModal = () => (
+     <Modal
+       visible={showProcedureConfirm}
+       animationType="slide"
+       transparent={true}
+       onRequestClose={() => setShowProcedureConfirm(false)}
+     >
+       <View style={styles.modalContainer}>
+         <View style={styles.confirmModalContent}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Confirmare finalizare procedură</Text>
+           </View>
+           
+           {currentBooking && (
+             <View style={styles.modalBody}>
+               <Text style={styles.confirmText}>
+                 Sunteți sigur că doriți să finalizați o procedură pentru pacientul <Text style={styles.boldText}>{currentBooking.patientName}</Text>?
+               </Text>
+               
+               <View style={styles.infoBox}>
+                 <Ionicons name="information-circle" size={20} color={colors.info} />
+                 <Text style={styles.infoText}>
+                   {currentBooking.procedureCount > 1 
+                     ? `După finalizare vor rămâne ${currentBooking.procedureCount - 1} proceduri.` 
+                     : 'Aceasta este ultima procedură. Programarea va fi marcată ca finalizată.'}
+                 </Text>
+               </View>
+               
+               <View style={styles.confirmButtons}>
+                 <TouchableOpacity 
+                   style={[styles.confirmButton, styles.cancelButton]}
+                   onPress={() => setShowProcedureConfirm(false)}
+                 >
+                   <Text style={styles.cancelButtonText}>Anulează</Text>
+                 </TouchableOpacity>
+                 
+                 <TouchableOpacity 
+                   style={[styles.confirmButton, styles.submitButton]}
+                   onPress={() => {
+                     setShowProcedureConfirm(false);
+                     handleCompleteOneProcedure();
+                   }}
+                 >
+                   <Ionicons name="checkmark" size={18} color="#fff" />
+                   <Text style={styles.submitButtonText}>Finalizează</Text>
+                 </TouchableOpacity>
+               </View>
+             </View>
+           )}
+         </View>
+       </View>
+     </Modal>
+   );
 
-              <View style={styles.userInfoPanel}>
-                <Text style={styles.userName}>
-                  <Text style={styles.boldText}>{user.name}</Text> {user.role === 'admin' ? '(Administrator)' : '(Asistent)'}
-                </Text>
-                <Text style={styles.userDetails}>
-                  <Text style={styles.smallText}>Oraș: {typeof user.city === 'object' ? user.city.name : 
-                              (typeof user.city === 'string' && user.city === '6823053af3c9fed99da59f39') ? 'Suceava' :
-                              (typeof user.city === 'string' && user.city === '6823053af3c9fed99da59f3a') ? 'Botoșani' : 
-                              'Necunoscut'}</Text>
-                </Text>
-              </View>
+   if (loading) {
+     return (
+       <View style={styles.centerContainer}>
+         <ActivityIndicator size="large" color={colors.primary} />
+         <Text style={styles.loadingText}>Se încarcă programările PNCC...</Text>
+       </View>
+     );
+   }
 
-              <View style={styles.statusOptions}>
-                {statusOptions.map(option => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.statusOption,
-                      { backgroundColor: option.color }
-                    ]}
-                    onPress={() => handleStatusUpdate(option.value)}
-                  >
-                    <Ionicons name={option.icon} size={24} color="#fff" />
-                    <Text style={styles.statusOptionText}>{option.value}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
+   if (error) {
+     return (
+       <View style={styles.centerContainer}>
+         <Ionicons name="alert-circle" size={48} color={colors.error} />
+         <Text style={styles.errorText}>{error}</Text>
+         <TouchableOpacity style={styles.retryButton} onPress={fetchBookings}>
+           <Text style={styles.retryButtonText}>Reîncearcă</Text>
+         </TouchableOpacity>
+       </View>
+     );
+   }
 
-  const renderDeleteConfirmModal = () => (
-    <Modal
-      visible={showDeleteConfirm}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowDeleteConfirm(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.confirmModalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Confirmare ștergere</Text>
-          </View>
-          
-          {bookingToDelete && (
-            <View style={styles.modalBody}>
-              <Text style={styles.confirmText}>
-                Sunteți sigur că doriți să ștergeți programarea PNCC pentru <Text style={styles.boldText}>{bookingToDelete.patientName}</Text> din data <Text style={styles.boldText}>{formatDate(bookingToDelete.startDate)}</Text>?
-              </Text>
-              
-              {bookingToDelete.documents && bookingToDelete.documents.length > 0 && (
-                <View style={styles.warningBox}>
-                  <Ionicons name="warning" size={20} color={colors.error} />
-                  <Text style={styles.warningText}>
-                    Această programare are {bookingToDelete.documents.length} documente atașate care vor fi șterse permanent.
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.confirmButtons}>
-                <TouchableOpacity 
-                  style={[styles.confirmButton, styles.cancelButton]}
-                  onPress={() => setShowDeleteConfirm(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Anulează</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.confirmButton, styles.deleteButton]}
-                  onPress={handleDeleteConfirm}
-                >
-                  <Ionicons name="trash" size={18} color="#fff" className="me-1" />
-                  <Text style={styles.deleteButtonText}>Șterge programare</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
+   return (
+     <View style={styles.container}>
+       {renderFilters()}
+       
+       <FlatList
+         data={filteredBookings}
+         renderItem={renderBookingItem}
+         keyExtractor={item => item._id}
+         contentContainerStyle={styles.listContainer}
+         refreshControl={
+           <RefreshControl
+             refreshing={refreshing}
+             onRefresh={onRefresh}
+             tintColor={colors.primary}
+           />
+         }
+         ListEmptyComponent={
+           <View style={styles.emptyContainer}>
+             <Ionicons name="ambulance" size={64} color={colors.textSecondary} />
+             <Text style={styles.emptyText}>Nu există programări PNCC</Text>
+             <TouchableOpacity 
+               style={styles.addFirstButton}
+               onPress={handleAddNewBooking}
+             >
+               <Ionicons name="add" size={20} color="#fff" />
+               <Text style={styles.addFirstButtonText}>Adaugă prima programare</Text>
+             </TouchableOpacity>
+           </View>
+         }
+       />
 
-  const renderDocumentDeleteConfirmModal = () => (
-    <Modal
-      visible={showDocumentDeleteConfirm}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowDocumentDeleteConfirm(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.confirmModalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Confirmare ștergere document</Text>
-          </View>
-          
-          <View style={styles.modalBody}>
-            <Text style={styles.confirmText}>
-              Sunteți sigur că doriți să ștergeți acest document? Această acțiune este permanentă și nu poate fi anulată.
-            </Text>
-            
-            <View style={styles.confirmButtons}>
-              <TouchableOpacity 
-                style={[styles.confirmButton, styles.cancelButton]}
-                onPress={() => setShowDocumentDeleteConfirm(false)}
-              >
-                <Text style={styles.cancelButtonText}>Anulează</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.confirmButton, styles.deleteButton]}
-                onPress={handleDeleteDocumentConfirm}
-              >
-                <Ionicons name="trash" size={18} color="#fff" className="me-1" />
-                <Text style={styles.deleteButtonText}>Șterge document</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+       <TouchableOpacity 
+         style={styles.fab}
+         onPress={handleAddNewBooking}
+       >
+         <Ionicons name="add" size={28} color="#fff" />
+       </TouchableOpacity>
 
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Se încarcă programările PNCC...</Text>
-      </View>
-    );
-  }
+       {renderAddModal()}
+       {renderEditModal()}
+       {renderViewModal()}
+       {renderStatusModal()}
+       {renderDeleteConfirmModal()}
+       {renderDocumentDeleteConfirmModal()}
+       {renderProcedureConfirmModal()}
+       
+       {showDatePicker && (
+         <DateTimePicker
+           value={dateFilter ? new Date(dateFilter) : new Date()}
+           mode="date"
+           display="default"
+           onChange={(event, selectedDate) => {
+             setShowDatePicker(false);
+             if (selectedDate) {
+               setDateFilter(selectedDate.toISOString().split('T')[0]);
+             }
+           }}
+         />
+       )}
+     </View>
+   );
+ };
 
-  if (error) {
-    return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="alert-circle" size={48} color={colors.error} />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchBookings}>
-          <Text style={styles.retryButtonText}>Reîncearcă</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+ const styles = StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: colors.background,
+   },
+   centerContainer: {
+     flex: 1,
+     justifyContent: 'center',
+     alignItems: 'center',
+     backgroundColor: colors.background,
+     padding: 20,
+   },
+   loadingText: {
+     marginTop: 10,
+     color: colors.textSecondary,
+     fontSize: 16,
+   },
+   errorText: {
+     marginTop: 10,
+     color: colors.error,
+     fontSize: 16,
+     textAlign: 'center',
+   },
+   retryButton: {
+     marginTop: 20,
+     paddingHorizontal: 20,
+     paddingVertical: 10,
+     backgroundColor: colors.primary,
+     borderRadius: 8,
+   },
+   retryButtonText: {
+     color: '#fff',
+     fontWeight: 'bold',
+   },
+   
+   // Filters
+   filtersContainer: {
+     padding: 15,
+     backgroundColor: colors.card,
+     elevation: 2,
+   },
+   searchBar: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: colors.inputBackground,
+     borderRadius: 10,
+     paddingHorizontal: 15,
+     marginBottom: 10,
+   },
+   searchInput: {
+     flex: 1,
+     paddingVertical: 12,
+     marginLeft: 10,
+     color: colors.text,
+     fontSize: 16,
+   },
+   filterButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     alignSelf: 'flex-start',
+     paddingHorizontal: 15,
+     paddingVertical: 8,
+     backgroundColor: colors.inputBackground,
+     borderRadius: 20,
+   },
+   filterButtonText: {
+     marginLeft: 5,
+     color: colors.primary,
+     fontWeight: 'bold',
+   },
+   filterOptions: {
+     marginTop: 15,
+   },
+   filterRow: {
+     flexDirection: 'row',
+     marginBottom: 12,
+     gap: 10,
+   },
+   filterColumn: {
+     flex: 1,
+   },
+   filterLabel: {
+     color: colors.textSecondary,
+     marginBottom: 5,
+     fontSize: 14,
+   },
+   pickerContainer: {
+     backgroundColor: colors.inputBackground,
+     borderRadius: 8,
+     overflow: 'hidden',
+   },
+   picker: {
+     color: colors.text,
+     backgroundColor: colors.inputBackground,
+   },
+   dateFilterButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: colors.inputBackground,
+     padding: 10,
+     borderRadius: 8,
+   },
+   dateFilterText: {
+     flex: 1,
+     marginLeft: 8,
+     color: colors.text,
+   },
+   clearDateButton: {
+     padding: 4,
+   },
+   filterActions: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     marginTop: 10,
+   },
+   sortOrderButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     paddingVertical: 8,
+     paddingHorizontal: 12,
+     borderRadius: 8,
+     backgroundColor: colors.inputBackground,
+   },
+   sortOrderText: {
+     marginLeft: 5,
+     color: colors.primary,
+     fontWeight: '500',
+   },
+   resetFiltersButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     paddingVertical: 8,
+     paddingHorizontal: 12,
+     borderRadius: 8,
+     backgroundColor: colors.inputBackground,
+   },
+   resetFiltersText: {
+     marginLeft: 5,
+     color: colors.primary,
+     fontWeight: '500',
+   },
+   
+   // List
+   listContainer: {
+     padding: 15,
+     paddingBottom: 80,
+   },
+   
+   // Booking Card
+   bookingCard: {
+     backgroundColor: colors.card,
+     borderRadius: 15,
+     padding: 15,
+     marginBottom: 15,
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 2 },
+     shadowOpacity: 0.1,
+     shadowRadius: 4,
+     elevation: 3,
+   },
+   bookingHeader: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'flex-start',
+     marginBottom: 10,
+   },
+   patientInfo: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   patientName: {
+     fontSize: 16,
+     fontWeight: 'bold',
+     color: colors.text,
+   },
+   documentBadge: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: colors.info,
+     paddingHorizontal: 8,
+     paddingVertical: 4,
+     borderRadius: 12,
+     marginLeft: 10,
+   },
+   documentBadgeText: {
+     color: '#fff',
+     fontSize: 12,
+     fontWeight: 'bold',
+     marginLeft: 4,
+   },
+   statusBadge: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     paddingHorizontal: 10,
+     paddingVertical: 5,
+     borderRadius: 15,
+   },
+   statusText: {
+     color: '#fff',
+     fontSize: 12,
+     fontWeight: 'bold',
+     marginLeft: 5,
+   },
+   locationContainer: {
+     marginBottom: 10,
+   },
+   locationRow: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 5,
+   },
+   locationText: {
+     flex: 1,
+     marginLeft: 8,
+     color: colors.text,
+     fontSize: 14,
+   },
+   bookingFooter: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     paddingTop: 10,
+     borderTopWidth: 1,
+     borderTopColor: colors.divider,
+   },
+   footerLeft: {
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   footerRight: {
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   dateText: {
+     marginLeft: 5,
+     color: colors.textSecondary,
+     fontSize: 12,
+   },
+   assistantRow: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginTop: 10,
+     paddingTop: 10,
+     borderTopWidth: 1,
+     borderTopColor: colors.divider,
+   },
+   assistantText: {
+     marginLeft: 5,
+     color: colors.textSecondary,
+     fontSize: 14,
+   },
+   actionButtons: {
+     flexDirection: 'row',
+     justifyContent: 'flex-end',
+     marginTop: 10,
+     gap: 8,
+   },
+   actionButton: {
+     width: 36,
+     height: 36,
+     borderRadius: 18,
+     justifyContent: 'center',
+     alignItems: 'center',
+   },
+   
+   // Empty State
+   emptyContainer: {
+     flex: 1,
+     justifyContent: 'center',
+     alignItems: 'center',
+     paddingTop: 100,
+   },
+   emptyText: {
+     marginTop: 20,
+     fontSize: 18,
+     color: colors.textSecondary,
+   },
+   addFirstButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginTop: 20,
+     backgroundColor: colors.primary,
+     paddingHorizontal: 20,
+     paddingVertical: 12,
+     borderRadius: 25,
+   },
+   addFirstButtonText: {
+     color: '#fff',
+     fontWeight: 'bold',
+     marginLeft: 5,
+   },
+   
+   // FAB
+   fab: {
+     position: 'absolute',
+     right: 20,
+     bottom: 20,
+     width: 56,
+     height: 56,
+     borderRadius: 28,
+     backgroundColor: colors.primary,
+     justifyContent: 'center',
+     alignItems: 'center',
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 4 },
+     shadowOpacity: 0.3,
+     shadowRadius: 6,
+     elevation: 8,
+   },
+   
+   // Modal
+   modalContainer: {
+     flex: 1,
+     justifyContent: 'flex-end',
+     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+   },
+   modalContent: {
+     backgroundColor: colors.card,
+     borderTopLeftRadius: 20,
+     borderTopRightRadius: 20,
+     maxHeight: '90%',
+   },
+   confirmModalContent: {
+     backgroundColor: colors.card,
+     borderRadius: 15,
+     marginHorizontal: 20,
+     maxHeight: '90%',
+     marginTop: 'auto',
+     marginBottom: 'auto',
+   },
+   modalHeader: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     padding: 20,
+     borderBottomWidth: 1,
+     borderBottomColor: colors.divider,
+   },
+   modalTitle: {
+     fontSize: 20,
+     fontWeight: 'bold',
+     color: colors.text,
+   },
+   modalBody: {
+     padding: 20,
+   },
+   modalFooter: {
+     flexDirection: 'row',
+     padding: 20,
+     borderTopWidth: 1,
+     borderTopColor: colors.divider,
+     gap: 10,
+   },
+   
+   // Form
+   inputLabel: {
+     fontSize: 14,
+     fontWeight: 'bold',
+     color: colors.text,
+     marginBottom: 8,
+     marginTop: 15,
+   },
+   input: {
+     backgroundColor: colors.inputBackground,
+     borderRadius: 10,
+     padding: 15,
+     color: colors.text,
+     fontSize: 16,
+   },
+   textArea: {
+     minHeight: 80,
+     textAlignVertical: 'top',
+   },
+   dateTimeRow: {
+     flexDirection: 'row',
+     gap: 15,
+   },
+   dateTimeContainer: {
+     flex: 1,
+   },
+   dateTimeButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: colors.inputBackground,
+     borderRadius: 10,
+     padding: 15,
+   },
+   dateTimeText: {
+     marginLeft: 10,
+     color: colors.text,
+     fontSize: 16,
+   },
+   procedureCountContainer: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: colors.inputBackground,
+     borderRadius: 10,
+     overflow: 'hidden',
+   },
+   procedureCountButton: {
+     width: 50,
+     height: 50,
+     justifyContent: 'center',
+     alignItems: 'center',
+   },
+   procedureCountInput: {
+     flex: 1,
+     textAlign: 'center',
+     fontSize: 16,
+     color: colors.text,
+   },
+   modalButton: {
+     flex: 1,
+     paddingVertical: 15,
+     borderRadius: 10,
+     alignItems: 'center',
+   },
+   cancelButton: {
+     backgroundColor: colors.inputBackground,
+   },
+   cancelButtonText: {
+     color: colors.text,
+     fontWeight: 'bold',
+   },
+   submitButton: {
+     backgroundColor: colors.primary,
+   },
+   submitButtonText: {
+     color: '#fff',
+     fontWeight: 'bold',
+   },
+   
+   // Document Section
+   documentSection: {
+     marginTop: 20,
+     paddingTop: 20,
+     borderTopWidth: 1,
+     borderTopColor: colors.divider,
+   },
+   sectionTitle: {
+     fontSize: 18,
+     fontWeight: 'bold',
+     color: colors.text,
+     marginBottom: 15,
+   },
+   uploadButtons: {
+     flexDirection: 'row',
+     gap: 10,
+     marginBottom: 15,
+   },
+   uploadButton: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'center',
+     backgroundColor: colors.inputBackground,
+     padding: 15,
+     borderRadius: 10,
+     borderWidth: 1,
+     borderColor: colors.primary,
+     borderStyle: 'dashed',
+   },
+   uploadButtonText: {
+     marginLeft: 8,
+     color: colors.primary,
+     fontWeight: 'bold',
+   },
+   selectedDocument: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: colors.inputBackground,
+     padding: 10,
+     borderRadius: 8,
+     marginBottom: 10,
+   },
+   selectedDocumentName: {
+     flex: 1,
+     marginLeft: 10,
+     color: colors.text,
+   },
+   
+   // Info Box
+   infoBox: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: colors.info + '20',
+     padding: 15,
+     borderRadius: 10,
+     marginTop: 15,
+   },
+   infoText: {
+     flex: 1,
+     marginLeft: 10,
+     color: colors.info,
+     fontSize: 14,
+   },
+   
+   // Detail Modal
+   detailSection: {
+     marginBottom: 20,
+   },
+   detailSectionTitle: {
+     fontSize: 16,
+     fontWeight: 'bold',
+     color: colors.text,
+     marginBottom: 10,
+   },
+   detailRow: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 8,
+   },
+   detailText: {
+     marginLeft: 10,
+     color: colors.text,
+     fontSize: 14,
+     flex: 1,
+   },
+   
+   // Document Management in View Modal
+   documentHeader: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     marginBottom: 15,
+   },
+   documentActions: {
+     flexDirection: 'row',
+     gap: 10,
+   },
+   documentActionButton: {
+     padding: 8,
+     backgroundColor: colors.inputBackground,
+     borderRadius: 8,
+   },
+   uploadProgress: {
+     marginBottom: 15,
+   },
+   uploadActions: {
+     flexDirection: 'row',
+     gap: 10,
+     marginTop: 10,
+   },
+   uploadActionButton: {
+     paddingHorizontal: 20,
+     paddingVertical: 10,
+     borderRadius: 8,
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   uploadActionText: {
+     color: '#fff',
+     fontWeight: 'bold',
+   },
+   progressBar: {
+     height: 4,
+     backgroundColor: colors.inputBackground,
+     borderRadius: 2,
+     marginTop: 10,
+     overflow: 'hidden',
+   },
+   progressFill: {
+     height: '100%',
+     backgroundColor: colors.primary,
+   },
+   documentsList: {
+     marginTop: 10,
+   },
+   documentItem: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'space-between',
+     backgroundColor: colors.inputBackground,
+     padding: 12,
+     borderRadius: 10,
+     marginBottom: 10,
+   },
+   documentInfo: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     flex: 1,
+   },
+   documentDetails: {
+     marginLeft: 10,
+     flex: 1,
+   },
+   documentName: {
+     color: colors.text,
+     fontSize: 14,
+     fontWeight: '500',
+   },
+   documentSize: {
+     color: colors.textSecondary,
+     fontSize: 12,
+     marginTop: 2,
+   },
+   documentItemActions: {
+     flexDirection: 'row',
+     gap: 10,
+   },
+   documentItemButton: {
+     padding: 8,
+   },
+   noDocuments: {
+     alignItems: 'center',
+     paddingVertical: 30,
+     backgroundColor: colors.inputBackground,
+     borderRadius: 10,
+   },
+   noDocumentsText: {
+     marginTop: 10,
+     color: colors.textSecondary,
+     fontSize: 14,
+   },
+   
+   // Status Modal
+   statusModalText: {
+     fontSize: 16,
+     color: colors.text,
+     marginBottom: 20,
+     textAlign: 'center',
+   },
+   boldText: {
+     fontWeight: 'bold',
+   },
+   smallText: {
+     fontSize: 12,
+   },
+   userInfoPanel: {
+     backgroundColor: colors.info + '20',
+     borderRadius: 8,
+     borderLeftWidth: 4,
+     borderLeftColor: colors.info,
+     padding: 12,
+     marginBottom: 20,
+   },
+   userName: {
+     fontSize: 16,
+     color: colors.text,
+   },
+   userDetails: {
+     fontSize: 12,
+     color: colors.textSecondary,
+     marginTop: 4,
+   },
+   statusOptions: {
+     gap: 10,
+   },
+   statusOption: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'center',
+     padding: 15,
+     borderRadius: 10,
+   },
+   statusOptionText: {
+     color: '#fff',
+     fontWeight: 'bold',
+     fontSize: 16,
+     marginLeft: 10,
+   },
 
-  return (
-    <View style={styles.container}>
-      {renderFilters()}
-      
-      <FlatList
-        data={filteredBookings}
-        renderItem={renderBookingItem}
-        keyExtractor={item => item._id}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="ambulance" size={64} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>Nu există programări PNCC</Text>
-            <TouchableOpacity 
-              style={styles.addFirstButton}
-              onPress={handleAddNewBooking}
-            >
-              <Ionicons name="add" size={20} color="#fff" />
-              <Text style={styles.addFirstButtonText}>Adaugă prima programare</Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
+   // Confirm Modal
+   confirmText: {
+     fontSize: 16,
+     color: colors.text,
+     marginBottom: 20,
+     textAlign: 'center',
+   },
+   warningBox: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: colors.error + '20',
+     borderRadius: 8,
+     padding: 12,
+     marginBottom: 20,
+   },
+   warningText: {
+     marginLeft: 10,
+     color: colors.error,
+     fontSize: 14,
+     flex: 1,
+   },
+   confirmButtons: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     gap: 10,
+   },
+   confirmButton: {
+     flex: 1,
+     paddingVertical: 12,
+     borderRadius: 8,
+     alignItems: 'center',
+     justifyContent: 'center',
+   },
+   deleteButton: {
+     backgroundColor: colors.error,
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   deleteButtonText: {
+     color: '#fff',
+     fontWeight: 'bold',
+     marginLeft: 5,
+   },
+   
+   // Buton pentru finalizarea unei proceduri
+   completeProcedureButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'center',
+     backgroundColor: colors.success,
+     paddingVertical: 10,
+     paddingHorizontal: 15,
+     borderRadius: 8,
+     marginTop: 15,
+   },
+   completeProcedureText: {
+     color: '#fff',
+     fontWeight: 'bold',
+     marginLeft: 8,
+   },
+ });
 
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={handleAddNewBooking}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
-
-      {renderAddModal()}
-      {renderEditModal()}
-      {renderViewModal()}
-      {renderStatusModal()}
-      {renderDeleteConfirmModal()}
-      {renderDocumentDeleteConfirmModal()}
-      
-      {showDatePicker && (
-        <DateTimePicker
-          value={dateFilter ? new Date(dateFilter) : new Date()}
-          mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowDatePicker(false);
-            if (selectedDate) {
-              setDateFilter(selectedDate.toISOString().split('T')[0]);
-            }
-          }}
-        />
-      )}
-    </View>
-  );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 10,
-    color: colors.textSecondary,
-    fontSize: 16,
-  },
-  errorText: {
-    marginTop: 10,
-    color: colors.error,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  
-  // Filters
-  filtersContainer: {
-    padding: 15,
-    backgroundColor: colors.card,
-    elevation: 2,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 10,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 12,
-    marginLeft: 10,
-    color: colors.text,
-    fontSize: 16,
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    backgroundColor: colors.inputBackground,
-    borderRadius: 20,
-  },
-  filterButtonText: {
-    marginLeft: 5,
-    color: colors.primary,
-    fontWeight: 'bold',
-  },
-  filterOptions: {
-    marginTop: 15,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    gap: 10,
-  },
-  filterColumn: {
-    flex: 1,
-  },
-  filterLabel: {
-    color: colors.textSecondary,
-    marginBottom: 5,
-    fontSize: 14,
-  },
-  pickerContainer: {
-    backgroundColor: colors.inputBackground,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  picker: {
-    color: colors.text,
-    backgroundColor: colors.inputBackground,
-  },
-  dateFilterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.inputBackground,
-    padding: 10,
-    borderRadius: 8,
-  },
-  dateFilterText: {
-    flex: 1,
-    marginLeft: 8,
-    color: colors.text,
-  },
-  clearDateButton: {
-    padding: 4,
-  },
-  filterActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  sortOrderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: colors.inputBackground,
-  },
-  sortOrderText: {
-    marginLeft: 5,
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  resetFiltersButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: colors.inputBackground,
-  },
-  resetFiltersText: {
-    marginLeft: 5,
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  
-  // List
-  listContainer: {
-    padding: 15,
-    paddingBottom: 80,
-  },
-  
-  // Booking Card
-  bookingCard: {
-    backgroundColor: colors.card,
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  bookingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  patientInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  patientName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  documentBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.info,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 10,
-  },
-  documentBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginLeft: 4,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-  },
-  statusText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginLeft: 5,
-  },
-  locationContainer: {
-    marginBottom: 10,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  locationText: {
-    flex: 1,
-    marginLeft: 8,
-    color: colors.text,
-    fontSize: 14,
-  },
-  bookingFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-  },
-  footerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  footerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateText: {
-    marginLeft: 5,
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-  assistantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-  },
-  assistantText: {
-    marginLeft: 5,
-    color: colors.textSecondary,
-    fontSize: 14,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 10,
-    gap: 8,
-  },
-  actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  
-  // Empty State
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 100,
-  },
-  emptyText: {
-    marginTop: 20,
-    fontSize: 18,
-    color: colors.textSecondary,
-  },
-  addFirstButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 20,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  addFirstButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 5,
-  },
-  
-  // FAB
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  
-  // Modal
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
-  },
-  confirmModalContent: {
-    backgroundColor: colors.card,
-    borderRadius: 15,
-    marginHorizontal: 20,
-    maxHeight: '90%',
-    marginTop: 'auto',
-    marginBottom: 'auto',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  modalBody: {
-    padding: 20,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    gap: 10,
-  },
-  
-  // Form
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
-    marginTop: 15,
-  },
-  input: {
-    backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 15,
-    color: colors.text,
-    fontSize: 16,
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  dateTimeRow: {
-    flexDirection: 'row',
-    gap: 15,
-  },
-  dateTimeContainer: {
-    flex: 1,
-  },
-  dateTimeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 15,
-  },
-  dateTimeText: {
-    marginLeft: 10,
-    color: colors.text,
-    fontSize: 16,
-  },
-  procedureCountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  procedureCountButton: {
-    width: 50,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  procedureCountInput: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    color: colors.text,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: colors.inputBackground,
-  },
-  cancelButtonText: {
-    color: colors.text,
-    fontWeight: 'bold',
-  },
-  submitButton: {
-    backgroundColor: colors.primary,
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  
-  // Document Section
-  documentSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 15,
-  },
-  uploadButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 15,
-  },
-  uploadButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.inputBackground,
-    padding: 15,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderStyle: 'dashed',
-  },
-  uploadButtonText: {
-    marginLeft: 8,
-    color: colors.primary,
-    fontWeight: 'bold',
-  },
-  selectedDocument: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.inputBackground,
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  selectedDocumentName: {
-    flex: 1,
-    marginLeft: 10,
-    color: colors.text,
-  },
-  
-  // Info Box
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.info + '20',
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 15,
-  },
-  infoText: {
-    flex: 1,
-    marginLeft: 10,
-    color: colors.info,
-    fontSize: 14,
-  },
-  
-  // Detail Modal
-  detailSection: {
-    marginBottom: 20,
-  },
-  detailSectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 10,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  detailText: {
-    marginLeft: 10,
-    color: colors.text,
-    fontSize: 14,
-    flex: 1,
-  },
-  
-  // Document Management in View Modal
-  documentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  documentActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  documentActionButton: {
-    padding: 8,
-    backgroundColor: colors.inputBackground,
-    borderRadius: 8,
-  },
-  uploadProgress: {
-    marginBottom: 15,
-  },
-  uploadActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 10,
-  },
-  uploadActionButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  uploadActionText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: colors.inputBackground,
-    borderRadius: 2,
-    marginTop: 10,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-  },
-  documentsList: {
-    marginTop: 10,
-  },
-  documentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.inputBackground,
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  documentInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  documentDetails: {
-    marginLeft: 10,
-    flex: 1,
-  },
-  documentName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  documentSize: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  documentItemActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  documentItemButton: {
-    padding: 8,
-  },
-  noDocuments: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-  },
-  noDocumentsText: {
-    marginTop: 10,
-    color: colors.textSecondary,
-    fontSize: 14,
-  },
-  
-  // Status Modal
-  statusModalText: {
-    fontSize: 16,
-    color: colors.text,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  boldText: {
-    fontWeight: 'bold',
-  },
-  smallText: {
-    fontSize: 12,
-  },
-  userInfoPanel: {
-    backgroundColor: colors.info + '20',
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.info,
-    padding: 12,
-    marginBottom: 20,
-  },
-  userName: {
-    fontSize: 16,
-    color: colors.text,
-  },
-  userDetails: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  statusOptions: {
-    gap: 10,
-  },
-  statusOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 15,
-    borderRadius: 10,
-  },
-  statusOptionText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginLeft: 10,
-  },
-
-  // Confirm Modal
-  confirmText: {
-    fontSize: 16,
-    color: colors.text,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  warningBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.error + '20',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 20,
-  },
-  warningText: {
-    marginLeft: 10,
-    color: colors.error,
-    fontSize: 14,
-    flex: 1,
-  },
-  confirmButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  confirmButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteButton: {
-    backgroundColor: colors.error,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  deleteButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 5,
-  },
-});
-
-export default PNCCBookingsScreen;
+ export default PNCCBookingsScreen;

@@ -16,6 +16,10 @@ import { useNavigation } from '@react-navigation/native';
 import axios from '../../utils/axios';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../utils/colors';
+import moment from 'moment';
+import 'moment/locale/ro';
+
+moment.locale('ro');
 
 const StatCard = ({ icon, value, label, iconBgColor, onPress }) => (
   <TouchableOpacity 
@@ -35,7 +39,7 @@ const StatCard = ({ icon, value, label, iconBgColor, onPress }) => (
   </TouchableOpacity>
 );
 
-const ServiceItem = ({ icon, title, info, amount, iconBgColor }) => (
+const ServiceItem = ({ icon, title, info, amount, iconBgColor, formattedDate, formattedTime }) => (
   <View style={styles.serviceItem}>
     <View style={styles.serviceItemContent}>
       <View style={[styles.serviceItemIcon, { backgroundColor: iconBgColor || colors.primary }]}>
@@ -44,6 +48,12 @@ const ServiceItem = ({ icon, title, info, amount, iconBgColor }) => (
       <View style={styles.serviceItemTextContainer}>
         <Text style={styles.serviceItemTitle}>{title}</Text>
         <Text style={styles.serviceItemInfo}>{info}</Text>
+        <View style={styles.dateTimeRow}>
+          <Ionicons name="calendar" size={12} color={colors.textSecondary} />
+          <Text style={styles.dateTimeText}>{formattedDate}</Text>
+          <Ionicons name="time" size={12} color={colors.textSecondary} style={{marginLeft: 10}} />
+          <Text style={styles.dateTimeText}>{formattedTime}</Text>
+        </View>
       </View>
     </View>
     {amount && (
@@ -212,55 +222,84 @@ const AdminDashboardScreen = () => {
       let allServices = [];
       
       if (privateServicesRes.data.success && privateServicesRes.data.data) {
-        const privateServices = privateServicesRes.data.data.map(service => ({
-          _id: service._id,
-          type: 'private',
-          icon: 'medical',
-          iconBgColor: colors.primary,
-          title: 'Transport privat',
-          info: `${service.pickupPoint} → ${service.dropoffPoint}`,
-          amount: `${service.amount} Lei`,
-          date: new Date(service.date),
-          cityName: service.city && typeof service.city === 'object' ? service.city.name : 'Necunoscut'
-        }));
+        const privateServices = privateServicesRes.data.data.map(service => {
+          // Format date & time
+          const serviceDate = new Date(service.date);
+          const formattedDate = moment(serviceDate).format('DD.MM.YYYY');
+          const formattedTime = moment(serviceDate).format('HH:mm');
+          
+          return {
+            _id: service._id,
+            type: 'private',
+            icon: 'medical',
+            iconBgColor: colors.primary,
+            title: 'Transport privat',
+            info: `${service.pickupPoint} → ${service.dropoffPoint}`,
+            amount: `${service.amount} Lei`,
+            date: new Date(service.date),
+            formattedDate: formattedDate,
+            formattedTime: formattedTime,
+            cityName: service.city && typeof service.city === 'object' ? service.city.name : 'Necunoscut'
+          }
+        });
         
         allServices = [...allServices, ...privateServices];
       }
       
       if (cnasServicesRes.data.success && cnasServicesRes.data.data) {
-        const cnasServices = cnasServicesRes.data.data.map(service => ({
-          _id: service._id,
-          type: 'cnas',
-          icon: 'medkit',
-          iconBgColor: colors.info,
-          title: 'Serviciu CNAS',
-          info: `${service.pickupPoint} → ${service.dropoffPoint}`,
-          amount: '',
-          date: new Date(service.date),
-          cityName: service.city && typeof service.city === 'object' ? service.city.name : 'Necunoscut'
-        }));
+        const cnasServices = cnasServicesRes.data.data.map(service => {
+          // Format date & time
+          const serviceDate = new Date(service.date);
+          const formattedDate = moment(serviceDate).format('DD.MM.YYYY');
+          const formattedTime = moment(serviceDate).format('HH:mm');
+          
+          return {
+            _id: service._id,
+            type: 'cnas',
+            icon: 'medkit',
+            iconBgColor: colors.info,
+            title: 'Serviciu CNAS',
+            info: `${service.pickupPoint} → ${service.dropoffPoint}`,
+            amount: '',
+            date: new Date(service.date),
+            formattedDate: formattedDate,
+            formattedTime: formattedTime,
+            cityName: service.city && typeof service.city === 'object' ? service.city.name : 'Necunoscut'
+          }
+        });
         
         allServices = [...allServices, ...cnasServices];
       }
       
       if (eventServicesRes.data.success && eventServicesRes.data.data) {
-        const events = eventServicesRes.data.data.map(event => ({
-          _id: event._id,
-          type: 'event',
-          icon: 'calendar',
-          iconBgColor: colors.success,
-          title: `Eveniment: ${event.eventName}`,
-          info: event.notes || '',
-          amount: '',
-          date: new Date(event.date),
-          cityName: event.city && typeof event.city === 'object' ? event.city.name : 'Necunoscut'
-        }));
+        const events = eventServicesRes.data.data.map(event => {
+          // Format date & time
+          const eventDate = new Date(event.date);
+          const formattedDate = moment(eventDate).format('DD.MM.YYYY');
+          const formattedTime = moment(eventDate).format('HH:mm');
+          
+          return {
+            _id: event._id,
+            type: 'event',
+            icon: 'calendar',
+            iconBgColor: colors.success,
+            title: `Eveniment: ${event.eventName}`,
+            info: event.notes || '',
+            amount: '',
+            date: new Date(event.date),
+            formattedDate: formattedDate,
+            formattedTime: formattedTime,
+            cityName: event.city && typeof event.city === 'object' ? event.city.name : 'Necunoscut'
+          }
+        });
         
         allServices = [...allServices, ...events];
       }
       
+      // Sortăm serviciile după dată (cele mai recente primele)
       allServices.sort((a, b) => b.date - a.date);
       
+      // Limităm la primele 4 servicii
       setRecentServices(allServices.slice(0, 4));
     } catch (err) {
       console.error('Eroare la obținerea serviciilor recente:', err);
@@ -361,6 +400,8 @@ const AdminDashboardScreen = () => {
           info={`${service.info} (${service.cityName})`}
           amount={service.amount}
           iconBgColor={service.iconBgColor}
+          formattedDate={service.formattedDate}
+          formattedTime={service.formattedTime}
         />
       </View>
     ));
@@ -737,6 +778,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.success,
   },
+  // Date & Time display styles
+  dateTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  dateTimeText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginLeft: 4,
+  },
   loadingContainer: {
     padding: 20,
     alignItems: 'center',
@@ -796,8 +848,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   userItemIcon: {
-    width: 40,
-    height: 40,
+    width: 40,height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
