@@ -9,7 +9,6 @@ import { colors } from '../utils/colors';
 // Screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import MainNavigator from './MainNavigator';
-import MechanicNavigator from './MechanicNavigator';
 import LoadingScreen from '../screens/LoadingScreen';
 
 const Stack = createStackNavigator();
@@ -50,8 +49,6 @@ const AppNavigator = () => {
       >
         {!isAuthenticated ? (
           <Stack.Screen name="Login" component={LoginScreen} />
-        ) : user?.role === 'mechanic' ? (
-          <Stack.Screen name="MechanicDashboard" component={MechanicNavigator} />
         ) : (
           <Stack.Screen name="MainApp" component={MainNavigator} />
         )}

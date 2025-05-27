@@ -26,6 +26,11 @@ const canAccessTracking = (user) => {
   return user?.role === 'admin' || user?.role === 'assistant';
 };
 
+// Helper function pentru a verifica dacă utilizatorul este mecanic
+const isMechanic = (user) => {
+  return user?.role === 'mechanic';
+};
+
 // Placeholder Screen temporar pentru ecranele neconstruite
 const PlaceholderScreen = ({ route }) => (
   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
@@ -69,108 +74,124 @@ function CustomDrawerContent(props) {
           </Text>
         </View>
 
-        {/* Menu Items */}
-        <View style={styles.drawerSection}>
-          <Text style={styles.sectionTitle}>GENERAL</Text>
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="home-outline" size={size} color={colors.text} />}
-            label="Dashboard"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('Dashboard')}
-          />
-          
-          {canAccessTracking(user) && (
+        {/* Menu Items pentru Mecanic - doar Service Ambulanțe */}
+        {isMechanic(user) ? (
+          <View style={styles.drawerSection}>
+            <Text style={styles.sectionTitle}>MANAGEMENT</Text>
+            
             <DrawerItem
-              icon={({ size }) => <Ionicons name="map-outline" size={size} color={colors.text} />}
-              label="Tracking"
+              icon={({ size }) => <Ionicons name="construct-outline" size={size} color={colors.text} />}
+              label="Service Ambulanțe"
               labelStyle={styles.drawerLabel}
-              onPress={() => props.navigation.navigate('Tracking')}
+              onPress={() => props.navigation.navigate('AmbulanceService')}
             />
-          )}
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="chatbubbles-outline" size={size} color={colors.text} />}
-            label="Chat 🚧"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('Chat')}
-          />
-        </View>
+          </View>
+        ) : (
+          <>
+            {/* Menu Items pentru Admin și Assistant */}
+            <View style={styles.drawerSection}>
+              <Text style={styles.sectionTitle}>GENERAL</Text>
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="home-outline" size={size} color={colors.text} />}
+                label="Dashboard"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('Dashboard')}
+              />
+              
+              {canAccessTracking(user) && (
+                <DrawerItem
+                  icon={({ size }) => <Ionicons name="map-outline" size={size} color={colors.text} />}
+                  label="Tracking"
+                  labelStyle={styles.drawerLabel}
+                  onPress={() => props.navigation.navigate('Tracking')}
+                />
+              )}
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="chatbubbles-outline" size={size} color={colors.text} />}
+                label="Chat 🚧"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('Chat')}
+              />
+            </View>
 
-        <View style={styles.drawerSection}>
-          <Text style={styles.sectionTitle}>SERVICII</Text>
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="person-outline" size={size} color={colors.text} />}
-            label="Servicii Private"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('PrivateBookings')}
-          />
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="medical-outline" size={size} color={colors.text} />}
-            label="Servicii CNAS"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('CNASBookings')}
-          />
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="medkit-outline" size={size} color={colors.text} />}
-            label="Servicii PNCC"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('PNCCBookings')}
-          />
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="calendar-outline" size={size} color={colors.text} />}
-            label="Evenimente"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('Events')}
-          />
-        </View>
+            <View style={styles.drawerSection}>
+              <Text style={styles.sectionTitle}>SERVICII</Text>
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="person-outline" size={size} color={colors.text} />}
+                label="Servicii Private"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('PrivateBookings')}
+              />
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="medical-outline" size={size} color={colors.text} />}
+                label="Servicii CNAS"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('CNASBookings')}
+              />
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="medkit-outline" size={size} color={colors.text} />}
+                label="Servicii PNCC"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('PNCCBookings')}
+              />
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="calendar-outline" size={size} color={colors.text} />}
+                label="Evenimente"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('Events')}
+              />
+            </View>
 
-        <View style={styles.drawerSection}>
-          <Text style={styles.sectionTitle}>MANAGEMENT</Text>
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="car-sport-outline" size={size} color={colors.text} />}
-            label="Carburant"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('Fuel')}
-          />
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="cash-outline" size={size} color={colors.text} />}
-            label="Cash Flow"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('CashFlow')}
-          />
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="fitness-outline" size={size} color={colors.text} />}
-            label="Medicamente"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('Medicaments')}
-          />
-          
-          <DrawerItem
-            icon={({ size }) => <Ionicons name="construct-outline" size={size} color={colors.text} />}
-            label="Service Amb"
-            labelStyle={styles.drawerLabel}
-            onPress={() => props.navigation.navigate('AmbulanceService')}
-          />
-          
-          {user?.role === 'admin' && (
-            <DrawerItem
-              icon={({ size }) => <Ionicons name="people-outline" size={size} color={colors.text} />}
-              label="Utilizatori"
-              labelStyle={styles.drawerLabel}
-              onPress={() => props.navigation.navigate('Users')}
-            />
-          )}
-        </View>
+            <View style={styles.drawerSection}>
+              <Text style={styles.sectionTitle}>MANAGEMENT</Text>
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="car-sport-outline" size={size} color={colors.text} />}
+                label="Carburant"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('Fuel')}
+              />
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="cash-outline" size={size} color={colors.text} />}
+                label="Cash Flow"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('CashFlow')}
+              />
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="fitness-outline" size={size} color={colors.text} />}
+                label="Medicamente"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('Medicaments')}
+              />
+              
+              <DrawerItem
+                icon={({ size }) => <Ionicons name="construct-outline" size={size} color={colors.text} />}
+                label="Service Ambulanțe"
+                labelStyle={styles.drawerLabel}
+                onPress={() => props.navigation.navigate('AmbulanceService')}
+              />
+              
+              {user?.role === 'admin' && (
+                <DrawerItem
+                  icon={({ size }) => <Ionicons name="people-outline" size={size} color={colors.text} />}
+                  label="Utilizatori"
+                  labelStyle={styles.drawerLabel}
+                  onPress={() => props.navigation.navigate('Users')}
+                />
+              )}
+            </View>
+          </>
+        )}
         
-        {/* Logout Button - Acum este inclus în DrawerContentScrollView */}
+        {/* Logout Button */}
         <View style={styles.logoutSection}>
           <DrawerItem
             icon={({ size }) => <Ionicons name="log-out-outline" size={size} color={colors.error} />}
@@ -205,85 +226,96 @@ const MainNavigator = () => {
           width: 280,
         },
       }}
+      initialRouteName={isMechanic(user) ? "AmbulanceService" : "Dashboard"}
     >
-      {/* ECRANE CONSTRUITE */}
-      <Drawer.Screen 
-        name="Dashboard" 
-        component={DashboardScreen}
-        options={{
-          title: 'Dashboard',
-        }}
-      />
-      
-      <Drawer.Screen 
-        name="PrivateBookings" 
-        component={PrivateBookingsScreen}
-        options={{ title: 'Servicii Private' }}
-      />
+      {/* Pentru mecanic - doar Service Ambulanțe */}
+      {isMechanic(user) ? (
+        <Drawer.Screen 
+          name="AmbulanceService" 
+          component={AmbulanceServiceScreen}
+          options={{ title: 'Service Ambulanțe' }}
+        />
+      ) : (
+        <>
+          {/* ECRANE PENTRU ADMIN ȘI ASSISTANT */}
+          <Drawer.Screen 
+            name="Dashboard" 
+            component={DashboardScreen}
+            options={{
+              title: 'Dashboard',
+            }}
+          />
+          
+          <Drawer.Screen 
+            name="PrivateBookings" 
+            component={PrivateBookingsScreen}
+            options={{ title: 'Servicii Private' }}
+          />
 
-      {/* ECRANE DE CONSTRUIT - Folosim PlaceholderScreen temporar */}
-      {canAccessTracking(user) && (
-        <Drawer.Screen 
-          name="Tracking" 
-          component={TrackingScreen}
-          options={{ title: 'Tracking Flotă' }}
-        />
-      )}
-      
-      <Drawer.Screen 
-        name="Chat" 
-        component={ChatScreen}
-        options={{ title: 'Chat' }}
-      />
-      
-      <Drawer.Screen 
-        name="CNASBookings" 
-        component={CNASBookingsScreen}
-        options={{ title: 'Servicii CNAS' }}
-      />
-      
-      <Drawer.Screen 
-        name="PNCCBookings" 
-        component={PNCCBookingsScreen}
-        options={{ title: 'Servicii PNCC' }}
-      />
-      
-      <Drawer.Screen 
-        name="Events" 
-        component={EventsScreen}
-        options={{ title: 'Evenimente' }}
-      />
-      
-      <Drawer.Screen 
-        name="Fuel" 
-        component={FuelScreen}
-        options={{ title: 'Carburant' }}
-      />
-      
-      <Drawer.Screen 
-        name="CashFlow" 
-        component={CashFlowScreen}
-        options={{ title: 'Cash Flow' }}
-      />
-      
-      <Drawer.Screen 
-        name="Medicaments" 
-        component={MedicamentsScreen}
-        options={{ title: 'Evidentă Medicamente' }}
-      />
-      
-      <Drawer.Screen 
-        name="AmbulanceService" 
-        component={AmbulanceServiceScreen}
-        options={{ title: 'Service Ambulanțe' }}
-      />
-      
-      {user?.role === 'admin' && (
-        <Drawer.Screen 
-          name="Users" 
-          component={UsersScreen}
-          options={{ title: 'Utilizatori' }}
-        />
+          {canAccessTracking(user) && (
+            <Drawer.Screen 
+              name="Tracking" 
+              component={TrackingScreen}
+              options={{ title: 'Tracking Flotă' }}
+            />
+          )}
+          
+          <Drawer.Screen 
+            name="Chat" 
+            component={ChatScreen}
+            options={{ title: 'Chat' }}
+          />
+          
+          <Drawer.Screen 
+            name="CNASBookings" 
+            component={CNASBookingsScreen}
+            options={{ title: 'Servicii CNAS' }}
+          />
+          
+          <Drawer.Screen 
+            name="PNCCBookings" 
+            component={PNCCBookingsScreen}
+            options={{ title: 'Servicii PNCC' }}
+          />
+          
+          <Drawer.Screen 
+            name="Events" 
+            component={EventsScreen}
+            options={{ title: 'Evenimente' }}
+          />
+          
+          <Drawer.Screen 
+            name="Fuel" 
+            component={FuelScreen}
+            options={{ title: 'Carburant' }}
+          />
+          
+          <Drawer.Screen 
+            name="CashFlow" 
+            component={CashFlowScreen}
+            options={{ title: 'Cash Flow' }}
+          />
+          
+          <Drawer.Screen 
+            name="Medicaments" 
+            component={MedicamentsScreen}
+            options={{ title: 'Evidentă Medicamente' }}
+          />
+          
+          <Drawer.Screen 
+            name="AmbulanceService" 
+            component={AmbulanceServiceScreen}
+            options={{ title: 'Service Ambulanțe' }}
+          />
+          
+          {user?.role === 'admin' && (
+            <Drawer.Screen 
+              name="Users" 
+              component={UsersScreen}
+              options={{ title: 'Utilizatori' }}
+            />
+          )}
+        </>
       )}
     </Drawer.Navigator>
   );
@@ -291,7 +323,7 @@ const MainNavigator = () => {
 
 const styles = StyleSheet.create({
   drawerContentContainer: {
-    paddingBottom: 20, // Asigură un spațiu la sfârșitul conținutului scrollabil
+    paddingBottom: 20,
   },
   drawerHeader: {
     padding: 20,

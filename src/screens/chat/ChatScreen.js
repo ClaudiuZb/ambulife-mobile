@@ -17,7 +17,8 @@ import {
  useColorScheme,
  Dimensions,
  RefreshControl,
- Linking
+ Linking,
+ Appearance
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
@@ -35,21 +36,26 @@ const { height: screenHeight } = Dimensions.get('window');
 
 const ChatScreen = ({ navigation }) => {
  const { user } = useSelector(state => state.auth);
- const colorScheme = useColorScheme();
- const isDark = colorScheme === 'dark';
+ const systemColorScheme = useColorScheme();
+ const isDark = true;
  
  const colors = {
    ...baseColors,
-   background: isDark ? '#000000' : baseColors.background,
-   card: isDark ? '#1c1c1e' : baseColors.card,
-   text: isDark ? '#ffffff' : baseColors.text,
-   textSecondary: isDark ? '#8e8e93' : baseColors.textSecondary,
-   border: isDark ? '#38383a' : baseColors.border,
-   inputBackground: isDark ? '#2c2c2e' : baseColors.inputBackground,
-   modalBackground: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.5)',
-   messageBackground: isDark ? '#2c2c2e' : '#f1f3f5',
-   myMessageBackground: isDark ? '#0066cc' : '#007BFF',
-   chatBackground: isDark ? '#0a0a0a' : '#e5e5ea',
+   background: '#000000',
+   card: '#1c1c1e',
+   text: '#ffffff',
+   textSecondary: '#8e8e93',
+   border: '#38383a',
+   inputBackground: '#2c2c2e',
+   modalBackground: 'rgba(0, 0, 0, 0.8)',
+   messageBackground: '#2c2c2e',
+   myMessageBackground: '#0066cc',
+   chatBackground: '#000000',
+   primary: baseColors.primary || '#007BFF',
+   success: baseColors.success || '#28a745',
+   warning: baseColors.warning || '#ffc107',
+   error: baseColors.error || '#dc3545',
+   info: baseColors.info || '#17a2b8'
  };
 
  const [chats, setChats] = useState([]);
@@ -133,7 +139,7 @@ const ChatScreen = ({ navigation }) => {
          newSocket.on('new_message', (newMessage) => {
            console.log('New message received:', newMessage);
            if (selectedChat && selectedChat._id === newMessage.chat) {
-             setMessages(prev => [newMessage, ...prev]); // Modificat pentru a adăuga la începutul array-ului
+             setMessages(prev => [newMessage, ...prev]);
              markMessageAsRead(newMessage._id, newMessage.chat);
              updateChatLastMessage(newMessage);
            } else {
@@ -160,7 +166,6 @@ const ChatScreen = ({ navigation }) => {
            }
          });
          
-         // Adăugăm listener pentru ștergerea grupului
          newSocket.on('group_deleted', ({ chatId }) => {
            setChats(prev => prev.filter(chat => chat._id !== chatId));
            if (selectedChat && selectedChat._id === chatId) {
@@ -369,7 +374,6 @@ const ChatScreen = ({ navigation }) => {
    }
  };
 
- // Adăugat funcția de ștergere grup
  const deleteGroup = async (chatId) => {
    try {
      setLoading(true);
@@ -413,7 +417,7 @@ const ChatScreen = ({ navigation }) => {
        replyTo: replyTo
      };
 
-     setMessages(prev => [optimisticMessage, ...prev]); // Modificat pentru a adăuga la începutul array-ului
+     setMessages(prev => [optimisticMessage, ...prev]);
      
      stopTyping();
      setNewMessage('');
@@ -568,7 +572,7 @@ const ChatScreen = ({ navigation }) => {
      if (res.data.success) {
        setNewMessage('');
        setReplyTo(null);
-       setMessages(prev => [res.data.data, ...prev]); // Modificat pentru a adăuga la începutul array-ului
+       setMessages(prev => [res.data.data, ...prev]);
        updateChatLastMessage(res.data.data);
      } else {
        throw new Error('Eroare la încărcarea atașamentului');
@@ -581,7 +585,7 @@ const ChatScreen = ({ navigation }) => {
 
  const handleDownloadAttachment = async (message) => {
    try {
-     setLoading(true); // Adaugă un indicator de încărcare
+     setLoading(true);
      
      const token = await AsyncStorage.getItem('token');
      if (!token) {
@@ -630,7 +634,7 @@ const ChatScreen = ({ navigation }) => {
        ]
      );
    } finally {
-     setLoading(false); // Ascunde indicatorul de încărcare
+     setLoading(false);
    }
  };
 
@@ -688,7 +692,6 @@ const ChatScreen = ({ navigation }) => {
    }
  };
 
- // Funcție pentru a verifica dacă utilizatorul este admin (aplicație sau grup)
  const isGroupAdmin = (chat) => {
    if (!chat || !chat.isGroupChat) return false;
    return (chat.groupAdmin && chat.groupAdmin._id === user._id) || user.role === 'admin';
@@ -842,20 +845,21 @@ const ChatScreen = ({ navigation }) => {
 
  return (
    <View style={[styles.container, { backgroundColor: colors.background }]}>
-     <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+     <StatusBar barStyle="light-content" backgroundColor={colors.background} />
      
      {selectedChat ? (
-       <KeyboardAvoidingView 
-         style={styles.chatContainer} 
-         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-       >
-         <View style={[styles.chatHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-           <TouchableOpacity
-             style={styles.backButton}
-             onPress={() => setSelectedChat(null)}
-           >
-             <Ionicons name="arrow-back" size={24} color={colors.text} />
+       <View style={[styles.chatContainer, { backgroundColor: colors.chatBackground }]}>
+         <KeyboardAvoidingView 
+           style={{ flex: 1 }} 
+           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+         >
+           <View style={[styles.chatHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+             <TouchableOpacity
+               style={styles.backButton}
+               onPress={() => setSelectedChat(null)}
+             >
+               <Ionicons name="arrow-back" size={24} color={colors.text} />
            </TouchableOpacity>
            
            <View style={[styles.avatar, { backgroundColor: selectedChat.isGroupChat ? colors.primary : colors.success }]}>
@@ -880,7 +884,6 @@ const ChatScreen = ({ navigation }) => {
              <Ionicons name="search" size={24} color={colors.primary} />
            </TouchableOpacity>
            
-           {/* Adăugat buton de ștergere grup în header pentru admini */}
            {selectedChat.isGroupChat && isGroupAdmin(selectedChat) && (
              <TouchableOpacity
                style={styles.headerAction}
@@ -939,9 +942,9 @@ const ChatScreen = ({ navigation }) => {
            keyExtractor={(item) => item._id}
            renderItem={renderMessage}
            style={[styles.messagesList, { backgroundColor: colors.chatBackground }]}
-           contentContainerStyle={styles.messagesContent}
+           contentContainerStyle={[styles.messagesContent, { backgroundColor: colors.chatBackground }]}
            showsVerticalScrollIndicator={false}
-           inverted={true} // Setat la true pentru a inversa ordinea mesajelor
+           inverted={true}
            keyboardShouldPersistTaps="handled"
            ListEmptyComponent={
              messagesLoading ? (
@@ -1034,6 +1037,7 @@ const ChatScreen = ({ navigation }) => {
            </TouchableOpacity>
          </View>
        </KeyboardAvoidingView>
+       </View>
      ) : (
        <View style={styles.chatListContainer}>
          <View style={[styles.listHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -1155,7 +1159,7 @@ const ChatScreen = ({ navigation }) => {
                </View>
              </TouchableOpacity>
            )}
-           style={styles.chatList}
+           style={[styles.chatList, { backgroundColor: colors.background }]}
            showsVerticalScrollIndicator={false}
            refreshControl={
              <RefreshControl
@@ -1324,7 +1328,6 @@ const ChatScreen = ({ navigation }) => {
        </View>
      </Modal>
      
-     {/* Overlay de încărcare global */}
      {loading && (
        <View style={[styles.loadingOverlay, { backgroundColor: colors.modalBackground }]}>
          <ActivityIndicator size="large" color={colors.primary} />
@@ -1793,7 +1796,6 @@ const styles = StyleSheet.create({
    fontSize: 16,
    marginLeft: 12,
  },
- // Adăugat stil pentru overlay-ul de încărcare
  loadingOverlay: {
    position: 'absolute',
    top: 0,
